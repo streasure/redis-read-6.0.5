@@ -155,6 +155,7 @@ sds sparklineRenderRange(sds output, struct sequence *seq, int rows, int offset,
             if (step < 0) step = 0;
             if (step >= steps) step = steps-1;
             //如果没有到需要的rows
+            //TODO 仔细阅读这一段的意思
             if (row < rows) {
                 /* Print the character needed to create the sparkline */
                 /* step控制输出的字符是哪一个 */
