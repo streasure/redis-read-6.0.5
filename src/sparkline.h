@@ -30,27 +30,35 @@
 #ifndef __SPARKLINE_H
 #define __SPARKLINE_H
 
+/* sparkline是一类信息体积小和数据密度高的图表。目前它被用作一些测量，
+ *相关的变化的信息呈现的方式，如平均温度，股市交投活跃。sparkline常常以一组多条的形式出现在柱状图，折线图当中。
+ *可以理解为一个图线信息 */
 /* A sequence is represented of many "samples" */
+//图像上的点，有文字和值大小
 struct sample {
     double value;
     char *label;
 };
 
+/* 图线信息结构体，包括n个元素点，可以据此描述出图，绘图的可不是直接按点和值直接绘制的 */
 struct sequence {
-    int length;
-    int labels;
-    struct sample *samples;
-    double min, max;
+    int length;//元素点个数
+    int labels;//记录的是samples中label不为空的个数
+    struct sample *samples;//元素点列表
+    double min, max;//元素的最大最小值
 };
 
+/* 定义了一些渲染图时候一些属性操作设置 */
 #define SPARKLINE_NO_FLAGS 0
 #define SPARKLINE_FILL 1      /* Fill the area under the curve. */
 #define SPARKLINE_LOG_SCALE 2 /* Use logarithmic scale. */
 
-struct sequence *createSparklineSequence(void);
-void sparklineSequenceAddSample(struct sequence *seq, double value, char *label);
-void freeSparklineSequence(struct sequence *seq);
+struct sequence *createSparklineSequence(void);//创建图线序列结构体
+void sparklineSequenceAddSample(struct sequence *seq, double value, char *label);//在图线序列中添加一个信息点
+void freeSparklineSequence(struct sequence *seq);//释放图线序列
+//渲染图线序列为一个图，其实就是得到一个字符串组成的图
 sds sparklineRenderRange(sds output, struct sequence *seq, int rows, int offset, int len, int flags);
+//方法同上，只是少可一个偏移量
 sds sparklineRender(sds output, struct sequence *seq, int columns, int rows, int flags);
 
 #endif /* __SPARKLINE_H */
