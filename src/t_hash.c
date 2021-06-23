@@ -37,6 +37,20 @@
 /* Check the length of a number of objects to see if we need to convert a
  * ziplist to a real hash. Note that we only check string encoded objects
  * as their string length can be queried in constant time. */
+/*
+检查多个对象的长度，看看是否需要将ziplist转换为真正的hash表。注意，我们只检查被encode完的对象，因为它们的字符串长度可以在常量时间内查询到。
+*/
+
+// typedef struct redisObject {
+//     unsigned type:4;
+//     unsigned encoding:4;
+//     unsigned lru:LRU_BITS=24; /* LRU time (relative to global lru_clock) or
+//                             * LFU data (least significant 8 bits frequency
+//                             * and most significant 16 bits access time). */
+//     int refcount;
+//     void *ptr;
+// } robj;
+
 void hashTypeTryConversion(robj *o, robj **argv, int start, int end) {
     int i;
 
