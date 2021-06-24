@@ -56,6 +56,7 @@ void memrev16(void *p) {
 
 /* Toggle the 32 bit unsigned integer pointed by *p from little endian to
  * big endian */
+//将32位字节的数据反转，32/8=4 0和3换，1和2换
 void memrev32(void *p) {
     unsigned char *x = p, t;
 

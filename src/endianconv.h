@@ -57,6 +57,7 @@ uint64_t intrev64(uint64_t v);
 #define memrev32ifbe(p) memrev32(p)
 #define memrev64ifbe(p) memrev64(p)
 #define intrev16ifbe(v) intrev16(v)
+//将这个数字反转
 #define intrev32ifbe(v) intrev32(v)
 #define intrev64ifbe(v) intrev64(v)
 #endif
