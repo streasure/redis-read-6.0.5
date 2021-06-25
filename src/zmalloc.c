@@ -191,11 +191,13 @@ void *zrealloc(void *ptr, size_t size) {
 #endif
     size_t oldsize;
     void *newptr;
-
+    //如果新申请的长度为0
     if (size == 0 && ptr != NULL) {
+        //将原先的sds释放掉
         zfree(ptr);
         return NULL;
     }
+    //如果原本就没有值则直接给一个新的空间
     if (ptr == NULL) return zmalloc(size);
 #ifdef HAVE_MALLOC_SIZE
     oldsize = zmalloc_size(ptr);
@@ -231,11 +233,14 @@ malloc_size(p)                 【Mac系统】
 */
 #ifndef HAVE_MALLOC_SIZE
 size_t zmalloc_size(void *ptr) {
+    //地址往前偏移一位
     void *realptr = (char*)ptr-PREFIX_SIZE;
+    //获取这个内存地址第一个单位字节内的数据，存放的就是这个指针指向的内存的大小
     size_t size = *((size_t*)realptr);
     /* Assume at least that all the allocations are padded at sizeof(long) by
      * the underlying allocator. */
     //继续字节对齐，就像malloc分配空间是以字节为最小单位的
+    //将size用long字节对齐，补齐所漏的内存
     if (size&(sizeof(long)-1)) size += sizeof(long)-(size&(sizeof(long)-1));
     return size+PREFIX_SIZE;
 }

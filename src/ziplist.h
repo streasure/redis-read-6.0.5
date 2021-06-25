@@ -36,18 +36,31 @@
 
 //创建一个新的ziplist压缩表
 unsigned char *ziplistNew(void);
+//ziplist合并
 unsigned char *ziplistMerge(unsigned char **first, unsigned char **second);
+//像列表中推入数据
 unsigned char *ziplistPush(unsigned char *zl, unsigned char *s, unsigned int slen, int where);
+//索引定位到列表的某个位置
 unsigned char *ziplistIndex(unsigned char *zl, int index);
+//获取当前列表位置的下一个值
 unsigned char *ziplistNext(unsigned char *zl, unsigned char *p);
+//获取当期列表位置的前一个值
 unsigned char *ziplistPrev(unsigned char *zl, unsigned char *p);
+//获取列表的信息
 unsigned int ziplistGet(unsigned char *p, unsigned char **sval, unsigned int *slen, long long *lval);
+//向列表中插入数据
 unsigned char *ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen);
+//列表中删除某个结点
 unsigned char *ziplistDelete(unsigned char *zl, unsigned char **p);
+//从index索引对应的结点开始算起，删除num个结点
 unsigned char *ziplistDeleteRange(unsigned char *zl, int index, unsigned int num);
+//列表间的比较方法
 unsigned int ziplistCompare(unsigned char *p, unsigned char *s, unsigned int slen);
+//在列表中寻找某个结点
 unsigned char *ziplistFind(unsigned char *p, unsigned char *vstr, unsigned int vlen, unsigned int skip);
+//返回列表的长度
 unsigned int ziplistLen(unsigned char *zl);
+//返回列表的二进制长度，返回的是字节数
 size_t ziplistBlobLen(unsigned char *zl);
 void ziplistRepr(unsigned char *zl);
 

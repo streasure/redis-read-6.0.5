@@ -643,6 +643,7 @@ unsigned char *ziplistNew(void) {
 }
 
 /* Resize the ziplist. */
+//重置ziplist
 unsigned char *ziplistResize(unsigned char *zl, unsigned int len) {
     zl = zrealloc(zl,len);
     ZIPLIST_BYTES(zl) = intrev32ifbe(len);
