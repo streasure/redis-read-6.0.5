@@ -250,6 +250,7 @@
 // 假设char *zl 指向ziplist首地址
 // 指向zlbytes字段
 /* Return total bytes a ziplist is composed of. 返回ziplist包含的总字节数。*/
+//获取zl指向内存的第一个uint32_t长度的内存中的值
 #define ZIPLIST_BYTES(zl)       (*((uint32_t*)(zl)))
 // 指向zltail字段(zl+4)
 /* Return the offset of the last item inside the ziplist.返回ziplist中最后一项的偏移量。 */
@@ -612,6 +613,17 @@ void zipEntry(unsigned char *p, zlentry *e) {
     e->p = p;
 }
 
+//ziplist结构示意图（随时理解随时改）
+/*
+area        |<          ziplist header         >|<                  entries                >|<   end   >|
+size            4bytes      4bytes      2bytes      ?           ?           ?                   1byte
+component   |   zlbytes |   zltail  |   zllen   |   entry1  |   entry2  |   ... |   entryN  |   zlend   |
+address     |                                   |                               |           |           
+            zl                           ZIPLIST_ENTRE_HEAD                     |      ZIPLIST_ENTRY_END
+                                                                        ZIPLIST_ENTRE_TAIL
+*/
+
+
 /* Create a new empty ziplist. */
 unsigned char *ziplistNew(void) {
     //长度为(32*2+16)+8
@@ -619,10 +631,13 @@ unsigned char *ziplistNew(void) {
     //申请长度为bytes的sds
     unsigned char *zl = zmalloc(bytes);
     //#define ZIPLIST_BYTES(zl)       (*((uint32_t*)(zl)))
-    //将bytes的字节中存放的数据反转 0123->3210
+    //将bytes的字节中存放的数据反转 0123->3210 存放在zlbytes
     ZIPLIST_BYTES(zl) = intrev32ifbe(bytes);
+    //将head长度的值反转后存入zltail
     ZIPLIST_TAIL_OFFSET(zl) = intrev32ifbe(ZIPLIST_HEADER_SIZE);
+    //zllen中初始化长度为0
     ZIPLIST_LENGTH(zl) = 0;
+    //zlend存放默认值255
     zl[bytes-1] = ZIP_END;
     return zl;
 }
