@@ -1,2 +1,5 @@
 ziplist讲解
 https://www.cnblogs.com/loujiayu/p/3805167.html
+
+总体的阅读顺序讲述
+https://blog.csdn.net/Androidlushangderen/article/list/11
