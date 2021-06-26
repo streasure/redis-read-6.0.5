@@ -338,6 +338,7 @@ typedef struct zlentry {
  * 'encoding' field of the zlentry structure. */
 #define ZIP_ENTRY_ENCODING(ptr, encoding) do {  \
     (encoding) = (ptr[0]); \
+    //ptr[0]的值小于12*16
     if ((encoding) < ZIP_STR_MASK) (encoding) &= ZIP_STR_MASK; \
 } while(0)
 
@@ -408,6 +409,7 @@ unsigned int zipStoreEntryEncoding(unsigned char *p, unsigned char encoding, uns
  * variable will hold the number of bytes required to encode the entry
  * length, and the 'len' variable will hold the entry length. */
 #define ZIP_DECODE_LENGTH(ptr, encoding, lensize, len) do {                    \
+    //对encodeing赋值
     ZIP_ENTRY_ENCODING((ptr), (encoding));                                     \
     if ((encoding) < ZIP_STR_MASK) {                                           \
         if ((encoding) == ZIP_STR_06B) {                                       \
@@ -460,10 +462,12 @@ unsigned int zipStorePrevEntryLength(unsigned char *p, unsigned int len) {
 /* Return the number of bytes used to encode the length of the previous
  * entry. The length is returned by setting the var 'prevlensize'. */
 #define ZIP_DECODE_PREVLENSIZE(ptr, prevlensize) do {                          \
+    //如果这个值小于254，表示只用了1byte空间就可以存储
     if ((ptr)[0] < ZIP_BIG_PREVLEN) {                                          \
         (prevlensize) = 1;                                                     \
     } else {                                                                   \
-        (prevlensize) = 5;                                                     \
+        /*代表1byte+4byte?*/ 
+        (prevlensize) = 5;                                                     \    
     }                                                                          \
 } while(0);
 
@@ -474,13 +478,23 @@ unsigned int zipStorePrevEntryLength(unsigned char *p, unsigned int len) {
  * The length of the previous entry is stored in 'prevlen', the number of
  * bytes needed to encode the previous entry length are stored in
  * 'prevlensize'. */
+/*
+ptr为entry数据的指针，指向entry数据的头地址
+*/
 #define ZIP_DECODE_PREVLEN(ptr, prevlensize, prevlen) do {                     \
+    //这边获取到的prevlensize为1或者5，看ptr指向的第一个byte的值是否小于254
     ZIP_DECODE_PREVLENSIZE(ptr, prevlensize);                                  \
+    //如果只有1
     if ((prevlensize) == 1) {                                                  \
+        //则将ptr[0]中的值赋给prevlen
         (prevlen) = (ptr)[0];                                                  \
+    //>254,类似于这个还是一个空的entry
     } else if ((prevlensize) == 5) {                                           \
+        //判读prevlen的类型暂用的字节数是否为4
         assert(sizeof((prevlen)) == 4);                                        \
+        //将ptr指向的5个字节后四个字节中的内容复制到prevlen中
         memcpy(&(prevlen), ((char*)(ptr)) + 1, 4);                             \
+        //将prevlen中的值进行翻转
         memrev32ifbe(&prevlen);                                                \
     }                                                                          \
 } while(0);
@@ -509,8 +523,8 @@ int zipPrevLenByteDiff(unsigned char *p, unsigned int len) {
 /* Return the total number of bytes used by the entry pointed to by 'p'. */
 unsigned int zipRawEntryLength(unsigned char *p) {
     unsigned int prevlensize, encoding, lensize, len;
-    ZIP_DECODE_PREVLENSIZE(p, prevlensize);
     ZIP_DECODE_LENGTH(p + prevlensize, encoding, lensize, len);
+    ZIP_DECODE_PREVLENSIZE(p, prevlensize);
     return prevlensize + lensize + len;
 }
 
@@ -799,7 +813,10 @@ unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsigned int
 
 /* Insert item at "p". */
 unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen) {
+    //获取这个zl当前元素的长度
     size_t curlen = intrev32ifbe(ZIPLIST_BYTES(zl)), reqlen;
+    //prevlensize代表ziplist除去head之后的字节数
+    //prevlen在prevlensize为1是代表255，在prevlensize为5是代表后四个字节存储的内容的反转后的值
     unsigned int prevlensize, prevlen = 0;
     size_t offset;
     int nextdiff = 0;
@@ -810,10 +827,19 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
     zlentry tail;
 
     /* Find out prevlen for the entry that is inserted. */
+    //需要了解为什么别的entry不为255，如果是初始化的ziplist，这个存放的数据就是255
     if (p[0] != ZIP_END) {
+        //前置插入
+        /*
+        important
+        c语言中的宏定义其实是一种文本的替换，类似于一个函数，但是和传递形参的函数有所不同的是
+        宏对传递的参数做出的修改是会影响本身值的，类似于指针传递
+        */ 
         ZIP_DECODE_PREVLEN(p, prevlensize, prevlen);
     } else {
+        //获取掉过头节点信息的数据，ptail指向的是entry的数据开头
         unsigned char *ptail = ZIPLIST_ENTRY_TAIL(zl);
+        //这个entry不为空，就是ptail的第一位不是初始化的255
         if (ptail[0] != ZIP_END) {
             prevlen = zipRawEntryLength(ptail);
         }
@@ -1013,6 +1039,11 @@ unsigned char *ziplistMerge(unsigned char **first, unsigned char **second) {
 
 unsigned char *ziplistPush(unsigned char *zl, unsigned char *s, unsigned int slen, int where) {
     unsigned char *p;
+    //要么从头节点插入，要么从尾节点插入
+    //ZIPLIST_ENTRY_HEAD(zl)这个获取到ZIPLIST_ENTRE_HEAD这个位置的指针
+    //ZIPLIST_ENTRY_END(zl)这个宏获取到ZIPLIST_ENTRY_END这个点的指针
+    //空的ziplist前后两个指针地址是一样的
+    //p是指向内存地址的指针
     p = (where == ZIPLIST_HEAD) ? ZIPLIST_ENTRY_HEAD(zl) : ZIPLIST_ENTRY_END(zl);
     return __ziplistInsert(zl,p,s,slen);
 }
