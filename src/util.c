@@ -362,10 +362,12 @@ int string2ll(const char *s, size_t slen, long long *value) {
     unsigned long long v;
 
     /* A zero length string is not a valid number. */
+    //长度为0不能被转化
     if (plen == slen)
         return 0;
 
     /* Special case: first and only digit is 0. */
+    //如果只有一位并且这个值为0字符串
     if (slen == 1 && p[0] == '0') {
         if (value != NULL) *value = 0;
         return 1;
@@ -373,16 +375,19 @@ int string2ll(const char *s, size_t slen, long long *value) {
 
     /* Handle negative numbers: just set a flag and continue like if it
      * was a positive number. Later convert into negative. */
+    //如果是个负值
     if (p[0] == '-') {
         negative = 1;
         p++; plen++;
 
         /* Abort on only a negative sign. */
+        //如果只有一个符号
         if (plen == slen)
             return 0;
     }
 
     /* First digit should be 1-9, otherwise the string should just be 0. */
+    //第一个值必须是1-9的ascii码  
     if (p[0] >= '1' && p[0] <= '9') {
         v = p[0]-'0';
         p++; plen++;
@@ -391,7 +396,9 @@ int string2ll(const char *s, size_t slen, long long *value) {
     }
 
     /* Parse all the other digits, checking for overflow at every step. */
+    //循环将这个字符串转化为数字
     while (plen < slen && p[0] >= '0' && p[0] <= '9') {
+        //超过最大数
         if (v > (ULLONG_MAX / 10)) /* Overflow. */
             return 0;
         v *= 10;
@@ -404,11 +411,13 @@ int string2ll(const char *s, size_t slen, long long *value) {
     }
 
     /* Return if not all bytes were used. */
+    //如果有特殊字符
     if (plen < slen)
         return 0;
 
     /* Convert to negative if needed, and do the final overflow check when
      * converting from unsigned long long to long long. */
+    //做正负的最后处理，需要最后一次判断是否超过最大范围
     if (negative) {
         if (v > ((unsigned long long)(-(LLONG_MIN+1))+1)) /* Overflow. */
             return 0;

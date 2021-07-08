@@ -274,7 +274,7 @@
 
 /* Return the pointer to the last entry of a ziplist, using the
  * last entry offset inside the ziplist header. */
-// 指向ziplist中尾元素的首地址
+// 指向ziplist中元素的首地址
 #define ZIPLIST_ENTRY_TAIL(zl)  ((zl)+intrev32ifbe(ZIPLIST_TAIL_OFFSET(zl)))
 
 /* Return the pointer to the last byte of a ziplist, which is, the
@@ -338,11 +338,15 @@ typedef struct zlentry {
  * 'encoding' field of the zlentry structure. */
 #define ZIP_ENTRY_ENCODING(ptr, encoding) do {  \
     (encoding) = (ptr[0]); \
-    //ptr[0]的值小于12*16
+    //ptr[0]的值小于二进制的11000000
     if ((encoding) < ZIP_STR_MASK) (encoding) &= ZIP_STR_MASK; \
 } while(0)
 
 /* Return bytes needed to store integer encoded by 'encoding'. */
+/*
+这段代码需要和zipTryEncoding这个函数结合起来看就会很清晰
+大体就是存放这个数字需要多大的空间数，最大8个
+*/
 unsigned int zipIntSize(unsigned char encoding) {
     switch(encoding) {
     case ZIP_INT_8B:  return 1;
@@ -351,6 +355,7 @@ unsigned int zipIntSize(unsigned char encoding) {
     case ZIP_INT_32B: return 4;
     case ZIP_INT_64B: return 8;
     }
+    //如果encoding范围在11110001-11111101
     if (encoding >= ZIP_INT_IMM_MIN && encoding <= ZIP_INT_IMM_MAX)
         return 0; /* 4 bit immediate */
     panic("Invalid integer encoding 0x%02X", encoding);
@@ -409,9 +414,21 @@ unsigned int zipStoreEntryEncoding(unsigned char *p, unsigned char encoding, uns
  * variable will hold the number of bytes required to encode the entry
  * length, and the 'len' variable will hold the entry length. */
 #define ZIP_DECODE_LENGTH(ptr, encoding, lensize, len) do {                    \
-    //对encodeing赋值
+    /*
+    对encodeing赋值
+    如果p[0]的值小于0xc0则encoding的值为p[0]只保留最高两位的二进制数据，大于则等于p[0]
+    p[0]的最高两位二进制代表的含义哥有不同
+    一共8为[]byte{1,2,3,4,5,6,7,8}
+    1,2两个不同的组合代表后面的元素长度都不一样
+    最高位二进制(encoding)情况分析：
+    00：lensize = 1,len=这个内存存的元素值
+    01：lensize=2,len=取后两个字节的内容，做反转
+    10：lensize=5,len=去后四个字节的反转值
+    11：lensize=1,检测几个特殊的encoding值，返回1，2，3，4，8，其他的都为0
+    */
     ZIP_ENTRY_ENCODING((ptr), (encoding));                                     \
     if ((encoding) < ZIP_STR_MASK) {                                           \
+        //如果encoding为0，等于p[0]的值小于0xc0,没理解为什么不直接去p[0]还需要做个位运算
         if ((encoding) == ZIP_STR_06B) {                                       \
             (lensize) = 1;                                                     \
             (len) = (ptr)[0] & 0x3f;                                           \
@@ -427,6 +444,7 @@ unsigned int zipStoreEntryEncoding(unsigned char *p, unsigned char encoding, uns
         } else {                                                               \
             panic("Invalid string encoding 0x%02X", (encoding));               \
         }                                                                      \
+    //这边encoding 在 11000000 - 11111111
     } else {                                                                   \
         (lensize) = 1;                                                         \
         (len) = zipIntSize(encoding);                                          \
@@ -494,7 +512,7 @@ ptr为entry数据的指针，指向entry数据的头地址
         assert(sizeof((prevlen)) == 4);                                        \
         //将ptr指向的5个字节后四个字节中的内容复制到prevlen中
         memcpy(&(prevlen), ((char*)(ptr)) + 1, 4);                             \
-        //将prevlen中的值进行翻转
+        //将prevlen中的值进行翻转获取原始值
         memrev32ifbe(&prevlen);                                                \
     }                                                                          \
 } while(0);
@@ -532,11 +550,13 @@ unsigned int zipRawEntryLength(unsigned char *p) {
  * Stores the integer value in 'v' and its encoding in 'encoding'. */
 int zipTryEncoding(unsigned char *entry, unsigned int entrylen, long long *v, unsigned char *encoding) {
     long long value;
-
+    //对象长度超过32字节就不能被encoding，因为最大就是8个内存空间
     if (entrylen >= 32 || entrylen == 0) return 0;
+    //获取这个数据的encoding值和value,entry类似于这种"123","-123",不支持"123asd"
     if (string2ll((char*)entry,entrylen,&value)) {
         /* Great, the string can be encoded. Check what's the smallest
          * of our encoding types that can hold this value. */
+        //这边根据entry的值判断使用什么encoding方式，之前看到的p[0]>0xc0的选择可能就出于这边
         if (value >= 0 && value <= 12) {
             *encoding = ZIP_INT_IMM_MIN+value;
         } else if (value >= INT8_MIN && value <= INT8_MAX) {
@@ -812,8 +832,9 @@ unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsigned int
 }
 
 /* Insert item at "p". */
+//这个函数的作用是在zl的p指针位置插入slen长度的s
 unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen) {
-    //获取这个zl当前元素的长度
+    //获取这个zl当前元素的长度，这个长度存在头部信息的第一个32位数据中
     size_t curlen = intrev32ifbe(ZIPLIST_BYTES(zl)), reqlen;
     //prevlensize代表ziplist除去head之后的字节数
     //prevlen在prevlensize为1是代表255，在prevlensize为5是代表后四个字节存储的内容的反转后的值
@@ -821,6 +842,7 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
     size_t offset;
     int nextdiff = 0;
     unsigned char encoding = 0;
+    //没参与运算，只参与了赋值
     long long value = 123456789; /* initialized to avoid warning. Using a value
                                     that is easy to see if for some reason
                                     we use it uninitialized. */
@@ -835,23 +857,34 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
         c语言中的宏定义其实是一种文本的替换，类似于一个函数，但是和传递形参的函数有所不同的是
         宏对传递的参数做出的修改是会影响本身值的，类似于指针传递
         */ 
+        /*
+        这个函数的作用是对prevlensize,prevlen做赋值,
+        通过对p[0]值的判断，
+        如果p[0]的值<254,则prevlensize值为1,prevlen存的就是p[0]的值
+        否则prevlensize值为5，prevlen的值为p后面五个字节后四个字节存的值的反转
+        */
         ZIP_DECODE_PREVLEN(p, prevlensize, prevlen);
     } else {
         //获取掉过头节点信息的数据，ptail指向的是entry的数据开头
         unsigned char *ptail = ZIPLIST_ENTRY_TAIL(zl);
         //这个entry不为空，就是ptail的第一位不是初始化的255
         if (ptail[0] != ZIP_END) {
+            //TODO 没理解
             prevlen = zipRawEntryLength(ptail);
         }
     }
 
     /* See if the entry can be encoded */
+    //判断这个对象是不是能被encoding
     if (zipTryEncoding(s,slen,&value,&encoding)) {
         /* 'encoding' is set to the appropriate integer encoding */
+        //如果可以被压缩，则value存的就是s转化完成的longlong类型的数字，encoding也会被赋值为ZIP_INT_8B这种样式的
+        //这边获取存放这个东西需要的空间
         reqlen = zipIntSize(encoding);
     } else {
         /* 'encoding' is untouched, however zipStoreEntryEncoding will use the
          * string length to figure out how to encode it. */
+        //如果不能被压缩则直接该多少就是多少
         reqlen = slen;
     }
     /* We need space for both the length of the previous entry and
