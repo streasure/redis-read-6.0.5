@@ -209,14 +209,14 @@ void *zrealloc(void *ptr, size_t size) {
     return newptr;
 #else
     realptr = (char*)ptr-PREFIX_SIZE;
-    oldsize = *((size_t*)realptr);
-    newptr = realloc(realptr,size+PREFIX_SIZE);
-    if (!newptr) zmalloc_oom_handler(size);
+    oldsize = *((size_t*)realptr);//获取这个指针原始的长度
+    newptr = realloc(realptr,size+PREFIX_SIZE);//重新对这个指针分配空间
+    if (!newptr) zmalloc_oom_handler(size);//分配失败处理
 
-    *((size_t*)newptr) = size;
-    update_zmalloc_stat_free(oldsize+PREFIX_SIZE);
+    *((size_t*)newptr) = size;//将这个长度赋值给特征字段
+    update_zmalloc_stat_free(oldsize+PREFIX_SIZE);//修改内存占用情况
     update_zmalloc_stat_alloc(size+PREFIX_SIZE);
-    return (char*)newptr+PREFIX_SIZE;
+    return (char*)newptr+PREFIX_SIZE;//返回偏移后的指针，指向的就是数据所在的初始位置
 #endif
 }
 
