@@ -1,0 +1,21 @@
+ziplist的插入流程
+    请结合ziplistPush的函数源码理解
+插入的位置分为entry的头位置和尾位置
+插入的是sds形式的数据
+获取到原先这个ziplist的总长度curlen
+获取插入位置之前的元素存放的上一个entry的长度prevlen
+判断这个要插入的entry可不可以被encode，获取存放这个entry所需的reqlen
+    encode标准：
+        如果长度超过32位或者长度为0则无法压缩
+        如果这个字符串无法转换为longlong类型的整型也是无法被encode的
+    如果无法压缩则直接reqlen+slen
+    如果可以压缩，根据转化成的数字判断需要多少位来存储这个数字，并返回对应的encoding
+reqlen需要加上存放prevlen数据的内存
+reqlen在加上存储entry的encode方式的encoding数据的内存
+最终获得reqlen总需求量，也得到了entry存储数据的结构
+    <prevlen>|<encoding>|<data>
+插入准备：
+    重新申请新的ziplist的所需的空间，并对新申请的数据的头部节点的总长度数据和尾节点的固定数据做修改
+如果不是在尾部插入就将数据偏移到应该到的地方
+最后就是依次对entry的部分按照上面的结构依次进行赋值
+最后对存储entry数量的数据+1
