@@ -481,6 +481,7 @@ unsigned int zipStorePrevEntryLength(unsigned char *p, unsigned int len) {
         //如果长度小于254则为1，不然就为int长度加1
         return (len < ZIP_BIG_PREVLEN) ? 1 : sizeof(len)+1;
     } else {
+        //如果不是尾节点默认的255
         if (len < ZIP_BIG_PREVLEN) {
             p[0] = len;
             return 1;
@@ -564,9 +565,10 @@ unsigned int zipRawEntryLength(unsigned char *p) {
  * Stores the integer value in 'v' and its encoding in 'encoding'. */
 int zipTryEncoding(unsigned char *entry, unsigned int entrylen, long long *v, unsigned char *encoding) {
     long long value;
-    //对象长度超过32字节就不能被encoding，最大的长度就是2^32-1
+    //对象长度超过32字节就不能被encoding
     if (entrylen >= 32 || entrylen == 0) return 0;
     //获取这个数据的encoding值和value,entry类似于这种"123","-123",不支持"123asd"
+    //如果超过最大范围也是无法被压缩的
     if (string2ll((char*)entry,entrylen,&value)) {
         /* Great, the string can be encoded. Check what's the smallest
          * of our encoding types that can hold this value. */
@@ -595,6 +597,7 @@ void zipSaveInteger(unsigned char *p, int64_t value, unsigned char encoding) {
     int16_t i16;
     int32_t i32;
     int64_t i64;
+    //根据encoding不同对p之后不同的内存为做处理
     if (encoding == ZIP_INT_8B) {
         ((int8_t*)p)[0] = (int8_t)value;
     } else if (encoding == ZIP_INT_16B) {
@@ -613,6 +616,7 @@ void zipSaveInteger(unsigned char *p, int64_t value, unsigned char encoding) {
         i64 = value;
         memcpy(p,&i64,sizeof(i64));
         memrev64ifbe(p);
+    //如果数极小不做处理，数据已经存在encoding中
     } else if (encoding >= ZIP_INT_IMM_MIN && encoding <= ZIP_INT_IMM_MAX) {
         /* Nothing to do, the value is stored in the encoding itself. */
     } else {
@@ -675,6 +679,27 @@ address     |                                   |                               
 zlbytes存放的是这个ziplist的总长度（数据反转）无符号整型32位  最大2^32-1
 zltail存放的是头部数据的长度和entry元素的总长度（数据反转）无符号整型32位 最大2^32-1
 zllen存放的是这个ziplist数据的长度 无符号整型16位 最大2^16-1
+*/
+/*
+ziplist布局
+<zlbytes> <zltail> <zllen> <entry> <entry> ... <entry> <zlend>
+这是在注释中说明的ziplist布局，我们一个个来看，这些字段是什么：
+
+zlbytes：32bit无符号整数，表示ziplist占用的字节总数（包括本身占用的4个字节）；
+zltail：32bit无符号整数，记录最后一个entry的偏移量，方便快速定位到最后一个entry；
+zllen：16bit无符号整数，记录entry的个数；
+entry：存储的若干个元素，可以为字节数组或者整数；
+zlend：ziplist最后一个字节，是一个结束的标记位，值固定为255。
+*/
+/*
+entry数据构成
+<prevlen> <encoding> <entry-data>
+prevlen
+prevlen字段是变长的：
+前一个元素的长度小于254字节时，prevlen用1个字节表示；
+前一个元素的长度大于等于254字节时，prevlen用5个字节进行表示，此时，prevlen的第一个字节是固定的254（0xFE）（作为这种情况的一个标志），后面4个字节才表示前一个元素的长度。
+encoding:
+可以通过encoding&0xc0获取到data长度和encoding本身数据占用的字节数
 */
 
 
@@ -940,14 +965,13 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
     //获取这个的偏移值
     //空串这个值就是头节点的储存长度
     offset = p-zl;
-    //对zl重新设定长度
-    //第一个元素只需要在ziplist的head和tail之间增加reqlen长度的空间
+    //对zl申请新的空间并将之前的数据写入并将头数据中第一个32位数据置为新的长度，并将尾节点置为ZIP_END
     zl = ziplistResize(zl,curlen+reqlen+nextdiff);
     //获取最新的头节点结尾的地方
     p = zl+offset;
 
     /* Apply memory move when necessary and update tail offset. */
-    //如果是第一个元素，p[0]位置的数据不可知
+    //如果是第一个元素，p[0]的元素还是尾节点，只是尾节点后面带了reqlen长度的空间
     if (p[0] != ZIP_END) {
         /* Subtract one because of the ZIP_END bytes */
         /*
@@ -960,6 +984,7 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
         memmove(p+reqlen,p-nextdiff,curlen-offset-1+nextdiff);
 
         /* Encode this entry's raw length in the next entry. */
+        //将这个元素的长度放入他下一个元素的第一位
         if (forcelarge)
             zipStorePrevEntryLengthLarge(p+reqlen,reqlen);
         else
@@ -985,6 +1010,7 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
         }
     } else {
         /* This element will be the new tail. */
+        //为鸡毛又置了一遍，后续再来看，和初始化一个操作
         ZIPLIST_TAIL_OFFSET(zl) = intrev32ifbe(p-zl);
     }
 
@@ -997,13 +1023,18 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
     }
 
     /* Write the entry */
+    //向后偏移过前一个数据长度的空间
     p += zipStorePrevEntryLength(p,prevlen);
+    //向后偏移存放encoding数据的空间
     p += zipStoreEntryEncoding(p,encoding,slen);
     if (ZIP_IS_STR(encoding)) {
+        //将数据拷贝到新的空间中
         memcpy(p,s,slen);
     } else {
         zipSaveInteger(p,value,encoding);
     }
+
+    //entry元素数量+1
     ZIPLIST_INCR_LENGTH(zl,1);
     return zl;
 }
