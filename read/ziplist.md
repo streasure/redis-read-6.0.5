@@ -22,3 +22,8 @@ reqlen在加上存储entry的encode方式的encoding数据的内存
 如果不是在尾部插入就将数据偏移到应该到的地方
 最后就是依次对entry的部分按照上面的结构依次进行赋值
 最后对存储entry数量的数据+1
+
+ZIPLIST_TAIL_OFFSET(zl)//重点在ziplistpush的时候
+如果插入的位置为尾节点则会将尾节点到头结点的距离赋值给zltail
+如果头节点位置开始插入会将新申请的reqlen+原来的zltail赋值给最新的zltail
+所以这个函数获取到的就是最后一个entry所在的头部数据指针

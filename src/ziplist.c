@@ -682,7 +682,7 @@ address     |                                   |                               
 /*
 说明
 zlbytes存放的是这个ziplist的总长度（数据反转）无符号整型32位  最大2^32-1
-zltail存放的是头部数据的长度和entry元素的总长度（数据反转）无符号整型32位 最大2^32-1
+zltail存放的是头部数据的长度和所有entry元素的总长度（数据反转）无符号整型32位 最大2^32-1
 zllen存放的是这个ziplist数据的长度 无符号整型16位 最大2^16-1
 */
 /*
@@ -691,7 +691,6 @@ ziplist布局
 这是在注释中说明的ziplist布局，我们一个个来看，这些字段是什么：
 
 zlbytes：32bit无符号整数，表示ziplist占用的字节总数（包括本身占用的4个字节）；
-zltail：32bit无符号整数，记录最后一个entry的偏移量，方便快速定位到最后一个entry；
 zllen：16bit无符号整数，记录entry的个数；
 entry：存储的若干个元素，可以为字节数组或者整数；
 zlend：ziplist最后一个字节，是一个结束的标记位，值固定为255。
@@ -1203,10 +1202,11 @@ unsigned char *ziplistPush(unsigned char *zl, unsigned char *s, unsigned int sle
 unsigned char *ziplistIndex(unsigned char *zl, int index) {
     unsigned char *p;
     unsigned int prevlensize, prevlen = 0;
-    if (index < 0) {
+    if (index < 0) {//往后找
         index = (-index)-1;
+        //偏移到尾节点
         p = ZIPLIST_ENTRY_TAIL(zl);
-        if (p[0] != ZIP_END) {
+        if (p[0] != ZIP_END) {//如果不是尾节点
             ZIP_DECODE_PREVLEN(p, prevlensize, prevlen);
             while (prevlen > 0 && index--) {
                 p -= prevlen;
@@ -1214,11 +1214,12 @@ unsigned char *ziplistIndex(unsigned char *zl, int index) {
             }
         }
     } else {
-        p = ZIPLIST_ENTRY_HEAD(zl);
+        p = ZIPLIST_ENTRY_HEAD(zl);//从头结点开始查找
         while (p[0] != ZIP_END && index--) {
-            p += zipRawEntryLength(p);
+            p += zipRawEntryLength(p);//向后偏移entry占用的实际字节数
         }
     }
+    //如果已经查到底了
     return (p[0] == ZIP_END || index > 0) ? NULL : p;
 }
 
@@ -1234,11 +1235,11 @@ unsigned char *ziplistNext(unsigned char *zl, unsigned char *p) {
     /* "p" could be equal to ZIP_END, caused by ziplistDelete,
      * and we should return NULL. Otherwise, we should return NULL
      * when the *next* element is ZIP_END (there is no next entry). */
-    if (p[0] == ZIP_END) {
+    if (p[0] == ZIP_END) {//已经到底找不到下一个
         return NULL;
     }
 
-    p += zipRawEntryLength(p);
+    p += zipRawEntryLength(p);//偏移到下一个元素的位置
     if (p[0] == ZIP_END) {
         return NULL;
     }
@@ -1254,9 +1255,10 @@ unsigned char *ziplistPrev(unsigned char *zl, unsigned char *p) {
      * equal to the first element of the list, we're already at the head,
      * and should return NULL. */
     if (p[0] == ZIP_END) {
+        //默认难道就是最后一个头指针
         p = ZIPLIST_ENTRY_TAIL(zl);
         return (p[0] == ZIP_END) ? NULL : p;
-    } else if (p == ZIPLIST_ENTRY_HEAD(zl)) {
+    } else if (p == ZIPLIST_ENTRY_HEAD(zl)) {//已经在第一个元素的位置
         return NULL;
     } else {
         ZIP_DECODE_PREVLEN(p, prevlensize, prevlen);
