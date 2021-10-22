@@ -48,20 +48,21 @@ unsigned char *ziplistNext(unsigned char *zl, unsigned char *p);
 unsigned char *ziplistPrev(unsigned char *zl, unsigned char *p);
 //获取列表的信息
 unsigned int ziplistGet(unsigned char *p, unsigned char **sval, unsigned int *slen, long long *lval);
-//向列表中插入数据
+//向列表中插入数据，与ziplistPush一个道理
 unsigned char *ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen);
-//列表中删除某个结点
+//列表中删除p所在的结点
 unsigned char *ziplistDelete(unsigned char *zl, unsigned char **p);
-//从index索引对应的结点开始算起，删除num个结点
+//删除第index个位置entry之后的num个entry
 unsigned char *ziplistDeleteRange(unsigned char *zl, int index, unsigned int num);
-//列表间的比较方法
+//比较p所在的节点的数据和s的数据是不是一样，分string和数字
 unsigned int ziplistCompare(unsigned char *p, unsigned char *s, unsigned int slen);
-//在列表中寻找某个结点
+//在列表中寻找p开始的值和*vstr一样的结点
 unsigned char *ziplistFind(unsigned char *p, unsigned char *vstr, unsigned int vlen, unsigned int skip);
 //返回列表的长度
 unsigned int ziplistLen(unsigned char *zl);
-//返回列表的二进制长度，返回的是字节数
+//返回列表的占用的位数大小
 size_t ziplistBlobLen(unsigned char *zl);
+//打印ziplist
 void ziplistRepr(unsigned char *zl);
 
 #ifdef REDIS_TEST
