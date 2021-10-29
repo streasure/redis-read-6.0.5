@@ -12,3 +12,16 @@ realloc
             并把原来大小内存空间中的内容复制到newsize中。返回新的mem_address指针。（数据被移动了）。 
             老块被放回堆上。新分配的内存中的数据不可知 
             3、也可用来缩小长度
+
+memcmp函数原型
+     int memcmp(const void *str1, const void *str2, size_t n));
+参数
+     str1-- 指向内存块的指针。
+     str2-- 指向内存块的指针。
+     n-- 要被比较的字节数。
+功能
+     比较内存区域str1和str2的前n个字节。
+返回值
+     如果返回值 < 0，则表示 str1 小于 str2。
+     如果返回值 > 0，则表示 str2 小于 str1。
+     如果返回值 = 0，则表示 str1 等于 str2。
