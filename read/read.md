@@ -25,3 +25,12 @@ memcmp函数原型
      如果返回值 < 0，则表示 str1 小于 str2。
      如果返回值 > 0，则表示 str2 小于 str1。
      如果返回值 = 0，则表示 str1 等于 str2。
+
+memcpy函数原型
+void *memcpy(void *str1, const void *str2, size_t n)从存储区str2复制n个字节到存储区str1。
+返回值
+该函数返回一个指向目标存储区 str1 的指针。
+
+memmove函数原型
+void *memmove(void *str1, const void *str2, size_t n) 
+从str2复制n个字符到str1，但是在重叠内存块这方面，memmove()是比memcpy()更安全的方法。如果目标区域和源区域有重叠的话，memmove()能够保证源串在被覆盖之前将重叠区域的字节拷贝到目标区域中，复制后源区域的内容会被更改。如果目标区域与源区域没有重叠，则和memcpy()函数功能相同。

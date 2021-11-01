@@ -38,13 +38,49 @@
 //初始化只申请两个字节的空间，[]char{0,255}
 //每个char以254为辨识标准
 unsigned char *zipmapNew(void);
+//设置新的key
+/*
+unsigned char *zm   //zipmap
+unsigned char *key  //key值
+unsigned int klen   //key的长度
+unsigned char *val  //value值
+unsigned int vlen   //value长度
+int *update         //key更新标志
+*/
 unsigned char *zipmapSet(unsigned char *zm, unsigned char *key, unsigned int klen, unsigned char *val, unsigned int vlen, int *update);
+//删除zipmap中key
+/*
+unsigned char *zm   //zipmap
+unsigned char *key  //key值
+unsigned int klen   //key长度
+int *deleted        //删除成功标识
+*/
 unsigned char *zipmapDel(unsigned char *zm, unsigned char *key, unsigned int klen, int *deleted);
+//可能只是为了定位到key-value数据的首地址
 unsigned char *zipmapRewind(unsigned char *zm);
+//获取下一个k-v
+/*
+unsigned char *zm       //zipmap key首地址
+unsigned char **key     //key地址       
+unsigned int *klen      //key长度
+unsigned char **value   //value地址
+unsigned int *vlen      //value长度
+*/
 unsigned char *zipmapNext(unsigned char *zm, unsigned char **key, unsigned int *klen, unsigned char **value, unsigned int *vlen);
+//查询key
+/*
+unsigned char *zm       //zipmap
+unsigned char *key      //key值
+unsigned int klen       //key length
+unsigned char **value   //value首地址
+unsigned int *vlen      //value长度
+*/
 int zipmapGet(unsigned char *zm, unsigned char *key, unsigned int klen, unsigned char **value, unsigned int *vlen);
+//验证key是否存在
 int zipmapExists(unsigned char *zm, unsigned char *key, unsigned int klen);
+//获取k-v的个数
 unsigned int zipmapLen(unsigned char *zm);
+//获取zipmap占用的总长度
 size_t zipmapBlobLen(unsigned char *zm);
 void zipmapRepr(unsigned char *p);
 

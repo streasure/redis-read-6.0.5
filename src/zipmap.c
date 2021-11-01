@@ -117,17 +117,17 @@ static unsigned int zipmapDecodeLength(unsigned char *p) {
 /* Encode the length 'l' writing it in 'p'. If p is NULL it just returns
  * the amount of bytes required to encode such a length. */
 static unsigned int zipmapEncodeLength(unsigned char *p, unsigned int len) {
-    if (p == NULL) {
+    if (p == NULL) {//如果没有传指针，返回存这个长度需要的字节长度
         return ZIPMAP_LEN_BYTES(len);
     } else {
-        if (len < ZIPMAP_BIGLEN) {
-            p[0] = len;
+        if (len < ZIPMAP_BIGLEN) {//如果长度小于254，代表这个值可以被一个字节存下
+            p[0] = len;//将这个值存入p[0]
             return 1;
         } else {
-            p[0] = ZIPMAP_BIGLEN;
-            memcpy(p+1,&len,sizeof(len));
-            memrev32ifbe(p+1);
-            return 1+sizeof(len);
+            p[0] = ZIPMAP_BIGLEN;//p[0]设置长度超出上限的标志
+            memcpy(p+1,&len,sizeof(len));//将len的数据复制到p之后的字节中
+            memrev32ifbe(p+1);//数据反转
+            return 1+sizeof(len);//返回实际的字节长度
         }
     }
 }
@@ -147,9 +147,9 @@ static unsigned char *zipmapLookupRaw(unsigned char *zm, unsigned char *key, uns
         unsigned char free;
 
         /* Match or skip the key */
-        //获取p所在元素占用的长度
+        //获取p指向元素存储key长度所需要占用的长度
         l = zipmapDecodeLength(p);
-        //获取存这个长度数据需要的字节数 1 or 5
+        //获取存这个key本身的长度
         llen = zipmapEncodeLength(NULL,l);
         //如果key有值并且k没被赋值，当前节点k长度相同，并且数据相同
         if (key != NULL && k == NULL && l == klen && !memcmp(p+llen,key,l)) {
@@ -161,13 +161,13 @@ static unsigned char *zipmapLookupRaw(unsigned char *zm, unsigned char *key, uns
                 return p;
             }
         }
-        //p偏移到下一个数据所在
+        //p偏移到这个元素所在的value首地址
         p += llen+l;
         /* Skip the value as well */
-        l = zipmapDecodeLength(p);
+        l = zipmapDecodeLength(p);//获取存这个val长度所用的字节数
         //偏移到实际数据首地址
         p += zipmapEncodeLength(NULL,l);
-        //数据的第一位赋值给free
+        //获取vempty0
         free = p[0];
         //需要查看实际数据存储方式才能看懂
         p += l+1+free; /* +1 to skip the free byte */
@@ -177,10 +177,15 @@ static unsigned char *zipmapLookupRaw(unsigned char *zm, unsigned char *key, uns
     return k;
 }
 
-//获取k+v需要的长度，以255为flag，类似于ziplist len为1或者5
+//获取k+v需要的长度，以254为flag，类似于ziplist len为1或者5
+/******************************************************/
+/*
+返回的是存放klen+key+vlen+val+3的长度
+*/
+/******************************************************/
 static unsigned long zipmapRequiredLength(unsigned int klen, unsigned int vlen) {
     unsigned int l;
-
+    //会多申请三个字节用于使用，分别为存储key长度，存储value长度，free
     l = klen+vlen+3;
     if (klen >= ZIPMAP_BIGLEN) l += 4;
     if (vlen >= ZIPMAP_BIGLEN) l += 4;
@@ -203,7 +208,7 @@ static unsigned int zipmapRawValueLength(unsigned char *p) {
     unsigned int used;
 
     used = zipmapEncodeLength(NULL,l);
-    //没理解p[used] + 1这段多出来的数据段
+    //p[used]为free中存的数据
     used += p[used] + 1 + l;
     return used;
 }
@@ -242,7 +247,7 @@ unsigned char *zipmapSet(unsigned char *zm, unsigned char *key, unsigned int kle
     unsigned int freelen, reqlen = zipmapRequiredLength(klen,vlen);
     unsigned int empty, vempty;
     unsigned char *p;
-
+    //防止找不到key做的处理
     freelen = reqlen;
     //update不为null先赋值为0
     if (update) *update = 0;
@@ -264,10 +269,10 @@ unsigned char *zipmapSet(unsigned char *zm, unsigned char *key, unsigned int kle
         /* Key found. Is there enough space for the new value? */
         /* Compute the total length: */
         if (update) *update = 1;//代表原先的value被更新了
-        //获取需要释放的字节长度
+        //获取需要释放的字节长度key+value+free
         freelen = zipmapRawEntryLength(p);
         //如果释放的比需要的短需要重新申请大小
-        if (freelen < reqlen) {
+        if (freelen < reqlen) {//代表没有多余的空间 free为0
             /* Store the offset of this key within the current zipmap, so
              * it can be resized. Then, move the tail backwards so this
              * pair fits at the current position. */
@@ -280,8 +285,11 @@ unsigned char *zipmapSet(unsigned char *zm, unsigned char *key, unsigned int kle
 
             /* The +1 in the number of bytes to be moved is caused by the
              * end-of-zipmap byte. Note: the *original* zmlen is used. */
+            //将释放key之后的数据往前移动
             memmove(p+reqlen, p+freelen, zmlen-(offset+freelen+1));
+            //新的总长度为插入新元素之后的长度
             zmlen = zmlen-freelen+reqlen;
+            //后面计算的free中的数据为0
             freelen = reqlen;
         }
     }
@@ -290,47 +298,62 @@ unsigned char *zipmapSet(unsigned char *zm, unsigned char *key, unsigned int kle
      * be written. If there is too much free space, move the tail
      * of the zipmap a few bytes to the front and shrink the zipmap,
      * as we want zipmaps to be very space efficient. */
-    empty = freelen-reqlen;
-    if (empty >= ZIPMAP_VALUE_MAX_FREE) {
+    empty = freelen-reqlen;//所释放的减去需要的空间大小
+    //释放的空间比需要使用的大出很多
+    if (empty >= ZIPMAP_VALUE_MAX_FREE) {//如果大于一个int型，需要重排数据
         /* First, move the tail <empty> bytes to the front, then resize
          * the zipmap to be <empty> bytes smaller. */
+        //定位到map的数据修改的初始位置
         offset = p-zm;
+        //直接赋值因为空间够用
         memmove(p+reqlen, p+freelen, zmlen-(offset+freelen+1));
+        //总长度减去多余的
         zmlen -= empty;
+        //重新申请空间
         zm = zipmapResize(zm, zmlen);
+        //定位到需要修改的数据这边
         p = zm+offset;
         vempty = 0;
-    } else {
+    } else {//如果找不到key则vempty为0
         vempty = empty;
     }
 
     /* Just write the key + value and we are done. */
     /* Key: */
-    p += zipmapEncodeLength(p,klen);
-    memcpy(p,key,klen);
-    p += klen;
+    //p在可操作的地址
+    p += zipmapEncodeLength(p,klen);//这一步将klen写入到p之后的字节中并将p偏移这段字节
+    memcpy(p,key,klen);//将key的数据拷贝到p之后的数据中
+    p += klen;//继续偏移
     /* Value: */
-    p += zipmapEncodeLength(p,vlen);
-    *p++ = vempty;
-    memcpy(p,val,vlen);
+    p += zipmapEncodeLength(p,vlen);//与key相同的操作
+    /*
+    *p=vempty
+    p++
+    */
+   //这个不为0代表key存在的时候替换value多出来的字节
+    *p++ = vempty;//p[0]存的是多出来的字节数，并向后偏移一位
+    memcpy(p,val,vlen);//将val记录到后续的字节中
     return zm;
 }
 
 /* Remove the specified key. If 'deleted' is not NULL the pointed integer is
  * set to 0 if the key was not found, to 1 if it was found and deleted. */
+//删除key，delete不为空的情况下，0为没找到key，1为找到并且删除
 unsigned char *zipmapDel(unsigned char *zm, unsigned char *key, unsigned int klen, int *deleted) {
     unsigned int zmlen, freelen;
+    //查找key并且计算总长度
     unsigned char *p = zipmapLookupRaw(zm,key,klen,&zmlen);
-    if (p) {
+    if (p) {//找到了key
         freelen = zipmapRawEntryLength(p);
         memmove(p, p+freelen, zmlen-((p-zm)+freelen+1));
         zm = zipmapResize(zm, zmlen-freelen);
 
         /* Decrease zipmap length */
+        //更新k-v数量
         if (zm[0] < ZIPMAP_BIGLEN) zm[0]--;
 
         if (deleted) *deleted = 1;
-    } else {
+    } else {//找不到key
         if (deleted) *deleted = 0;
     }
     return zm;
@@ -345,26 +368,34 @@ unsigned char *zipmapRewind(unsigned char *zm) {
  * In the first call the first argument is the pointer to the zipmap + 1.
  * In the next calls what zipmapNext returns is used as first argument.
  * Example:
- *
+ * //这边展现的就是遍历zipmap的用法
  * unsigned char *i = zipmapRewind(my_zipmap);
  * while((i = zipmapNext(i,&key,&klen,&value,&vlen)) != NULL) {
  *     printf("%d bytes key at $p\n", klen, key);
  *     printf("%d bytes value at $p\n", vlen, value);
  * }
  */
+//提取最近的key和value
 unsigned char *zipmapNext(unsigned char *zm, unsigned char **key, unsigned int *klen, unsigned char **value, unsigned int *vlen) {
+    //如果这个zipmap没有值
     if (zm[0] == ZIPMAP_END) return NULL;
     if (key) {
         *key = zm;
         *klen = zipmapDecodeLength(zm);
+        //返回的是key的长度和地址指针
         *key += ZIPMAP_LEN_BYTES(*klen);
     }
+    //偏移到value
     zm += zipmapRawKeyLength(zm);
     if (value) {
+        //提前偏移free
         *value = zm+1;
+        //获取value长度
         *vlen = zipmapDecodeLength(zm);
+        //*value += ZIPMAP_LEN_BYTES(*vlen) + 1;这样更好理解
         *value += ZIPMAP_LEN_BYTES(*vlen);
     }
+    //偏移到下一个key首地址
     zm += zipmapRawValueLength(zm);
     return zm;
 }
@@ -373,10 +404,13 @@ unsigned char *zipmapNext(unsigned char *zm, unsigned char **key, unsigned int *
  * If the key is found the function returns 1, otherwise 0. */
 int zipmapGet(unsigned char *zm, unsigned char *key, unsigned int klen, unsigned char **value, unsigned int *vlen) {
     unsigned char *p;
-
+    //查找key
     if ((p = zipmapLookupRaw(zm,key,klen,NULL)) == NULL) return 0;
+    //找到的话需要偏移到value首地址
     p += zipmapRawKeyLength(p);
+    //长度
     *vlen = zipmapDecodeLength(p);
+    //返回value首地址
     *value = p + ZIPMAP_LEN_BYTES(*vlen) + 1;
     return 1;
 }
@@ -389,9 +423,9 @@ int zipmapExists(unsigned char *zm, unsigned char *key, unsigned int klen) {
 /* Return the number of entries inside a zipmap */
 unsigned int zipmapLen(unsigned char *zm) {
     unsigned int len = 0;
-    if (zm[0] < ZIPMAP_BIGLEN) {
+    if (zm[0] < ZIPMAP_BIGLEN) {//如果长度为可被第一个字节存储下来
         len = zm[0];
-    } else {
+    } else {//遍历长度，如果长度可被存储下来则直接存下来，可以为下一次获取方便
         unsigned char *p = zipmapRewind(zm);
         while((p = zipmapNext(p,NULL,NULL,NULL,NULL)) != NULL) len++;
 
