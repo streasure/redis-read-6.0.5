@@ -180,6 +180,7 @@ sds sdsnew(const char *init) {
 }
 
 /* Duplicate an sds string. */
+//复制一个sds
 sds sdsdup(const sds s) {
     return sdsnewlen(s, sdslen(s));
 }

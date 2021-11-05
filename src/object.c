@@ -83,12 +83,14 @@ robj *createRawStringObject(const char *ptr, size_t len) {
  * allocated in the same chunk as the object itself. */
 robj *createEmbeddedStringObject(const char *ptr, size_t len) {
     robj *o = zmalloc(sizeof(robj)+sizeof(struct sdshdr8)+len+1);
+    //指针地址偏移就是sdshdr8
     struct sdshdr8 *sh = (void*)(o+1);
 
     o->type = OBJ_STRING;
     o->encoding = OBJ_ENCODING_EMBSTR;
     o->ptr = sh+1;
     o->refcount = 1;
+    //设置删除策略？？？
     if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
         o->lru = (LFUGetTimeInMinutes()<<8) | LFU_INIT_VAL;
     } else {
@@ -98,12 +100,12 @@ robj *createEmbeddedStringObject(const char *ptr, size_t len) {
     sh->len = len;
     sh->alloc = len;
     sh->flags = SDS_TYPE_8;
-    if (ptr == SDS_NOINIT)
+    if (ptr == SDS_NOINIT)//如果没有初始化
         sh->buf[len] = '\0';
-    else if (ptr) {
+    else if (ptr) {//将值复制到buf
         memcpy(sh->buf,ptr,len);
         sh->buf[len] = '\0';
-    } else {
+    } else {//总长度为len+1，最后一位为"\0"
         memset(sh->buf,0,len+1);
     }
     return o;
@@ -115,7 +117,7 @@ robj *createEmbeddedStringObject(const char *ptr, size_t len) {
  *
  * The current limit of 44 is chosen so that the biggest string object
  * we allocate as EMBSTR will still fit into the 64 byte arena of jemalloc. */
-#define OBJ_ENCODING_EMBSTR_SIZE_LIMIT 44
+#define OBJ_ENCODING_EMBSTR_SIZE_LIMIT 44//为了适配jemalloc的64位
 robj *createStringObject(const char *ptr, size_t len) {
     if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT)
         return createEmbeddedStringObject(ptr,len);

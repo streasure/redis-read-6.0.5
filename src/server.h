@@ -372,6 +372,16 @@ typedef long long ustime_t; /* microsecond time type. */
 #define MAXMEMORY_FLAG_NO_SHARED_INTEGERS \
     (MAXMEMORY_FLAG_LRU|MAXMEMORY_FLAG_LFU)
 
+/*
+1.volatile-lru(least recently used):最近最少使用算法，从设置了过期时间的键中选择空转时间最长的键值对清除掉；
+2.volatile-lfu(least frequently used):最近最不经常使用算法，从设置了过期时间的键中选择某段时间之内使用频次最小的键值对清除掉；
+3.volatile-ttl:从设置了过期时间的键中选择过期时间最早的键值对清除；
+4.volatile-random:从设置了过期时间的键中，随机选择键进行清除；
+5.allkeys-lru:最近最少使用算法，从所有的键中选择空转时间最长的键值对清除；
+6.allkeys-lfu:最近最不经常使用算法，从所有的键中选择某段时间之内使用频次最少的键值对清除；
+7.allkeys-random:所有的键中，随机选择键进行删除；
+8.noeviction:不做任何的清理工作，在redis的内存超过限制之后，所有的写入操作都会返回错误；但是读操作都能正常的进行;
+*/
 #define MAXMEMORY_VOLATILE_LRU ((0<<8)|MAXMEMORY_FLAG_LRU)
 #define MAXMEMORY_VOLATILE_LFU ((1<<8)|MAXMEMORY_FLAG_LFU)
 #define MAXMEMORY_VOLATILE_TTL (2<<8)
@@ -584,7 +594,7 @@ typedef struct RedisModuleDigest {
 /* Objects encoding. Some kind of objects like Strings and Hashes can be
  * internally represented in multiple ways. The 'encoding' field of the object
  * is set to one of this fields for this object. */
-#define OBJ_ENCODING_RAW 0     /* Raw representation */
+#define OBJ_ENCODING_RAW 0     /* Raw representation 未经过任何压缩的数据*/
 #define OBJ_ENCODING_INT 1     /* Encoded as integer */
 #define OBJ_ENCODING_HT 2      /* Encoded as hash table */
 #define OBJ_ENCODING_ZIPMAP 3  /* Encoded as zipmap */
@@ -592,7 +602,7 @@ typedef struct RedisModuleDigest {
 #define OBJ_ENCODING_ZIPLIST 5 /* Encoded as ziplist */
 #define OBJ_ENCODING_INTSET 6  /* Encoded as intset */
 #define OBJ_ENCODING_SKIPLIST 7  /* Encoded as skiplist */
-#define OBJ_ENCODING_EMBSTR 8  /* Embedded sds string encoding */
+#define OBJ_ENCODING_EMBSTR 8  /* Embedded sds string encoding 嵌入式sds字符串编码*/
 #define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of ziplists */
 #define OBJ_ENCODING_STREAM 10 /* Encoded as a radix tree of listpacks */
 
@@ -1513,6 +1523,10 @@ typedef struct {
  * hashes involves both fields and values. Because it is possible that
  * not both are required, store pointers in the iterator to avoid
  * unnecessary memory allocation for fields/values. */
+ /*
+ 保存hashtable数据的抽象结构。
+ 哈希上的迭代同时涉及字段和值。但是因为这两个都不是必需的，所以可以将指针存储在迭代器中，以避免为字段/值分配不必要的内存。
+ */
 typedef struct {
     robj *subject;
     int encoding;

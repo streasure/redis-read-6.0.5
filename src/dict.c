@@ -262,11 +262,13 @@ static void _dictRehashStep(dict *d) {
 }
 
 /* Add an element to the target hash table */
+//在dict中增加一个entry，k=key,v=value
 int dictAdd(dict *d, void *key, void *val)
 {
     dictEntry *entry = dictAddRaw(d,key,NULL);
-
+    //entry获取失败代表插入dict失败
     if (!entry) return DICT_ERR;
+    //entry的value设置
     dictSetVal(d, entry, val);
     return DICT_OK;
 }
@@ -289,16 +291,18 @@ int dictAdd(dict *d, void *key, void *val)
  *
  * If key was added, the hash entry is returned to be manipulated by the caller.
  */
+//生成一个key为*key的entry
 dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing)
 {
     long index;
     dictEntry *entry;
     dictht *ht;
-
+    //判断是否在rehash阶段中
     if (dictIsRehashing(d)) _dictRehashStep(d);
 
     /* Get the index of the new element, or -1 if
      * the element already exists. */
+    //如果能找到key
     if ((index = _dictKeyIndex(d, key, dictHashKey(d,key), existing)) == -1)
         return NULL;
 
@@ -306,13 +310,17 @@ dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing)
      * Insert the element in top, with the assumption that in a database
      * system it is more likely that recently added entries are accessed
      * more frequently. */
+    //根据是否在扩展看在哪张hash表上做操作
     ht = dictIsRehashing(d) ? &d->ht[1] : &d->ht[0];
+    //建立新的entry
     entry = zmalloc(sizeof(*entry));
+    //这个新的entry设置为hash列的头节点
     entry->next = ht->table[index];
     ht->table[index] = entry;
     ht->used++;
 
     /* Set the hash entry fields. */
+    //将这个entry的key赋值
     dictSetKey(d, entry, key);
     return entry;
 }
@@ -473,6 +481,7 @@ void dictRelease(dict *d)
     zfree(d);
 }
 
+//在dict的两个表中查找key是否存在
 dictEntry *dictFind(dict *d, const void *key)
 {
     dictEntry *he;
@@ -991,6 +1000,7 @@ static unsigned long _dictNextPower(unsigned long size)
  *
  * Note that if we are in the process of rehashing the hash table, the
  * index is always returned in the context of the second (new) hash table. */
+//查看这个key是否在dict中存在
 static long _dictKeyIndex(dict *d, const void *key, uint64_t hash, dictEntry **existing)
 {
     unsigned long idx, table;
@@ -1000,6 +1010,7 @@ static long _dictKeyIndex(dict *d, const void *key, uint64_t hash, dictEntry **e
     /* Expand the hash table if needed */
     if (_dictExpandIfNeeded(d) == DICT_ERR)
         return -1;
+    //在两个hash表中查找key
     for (table = 0; table <= 1; table++) {
         idx = hash & d->ht[table].sizemask;
         /* Search if this slot does not already contain the given key */
@@ -1011,6 +1022,7 @@ static long _dictKeyIndex(dict *d, const void *key, uint64_t hash, dictEntry **e
             }
             he = he->next;
         }
+        //如果不在rehash阶段则代表只有一张hash表，直接break
         if (!dictIsRehashing(d)) break;
     }
     return idx;
