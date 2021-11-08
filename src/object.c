@@ -648,6 +648,7 @@ int getDoubleFromObjectOrReply(client *c, robj *o, double *target, const char *m
     return C_OK;
 }
 
+//将o中ptr指向的数据转化为long double->target
 int getLongDoubleFromObject(robj *o, long double *target) {
     long double value;
 
@@ -682,6 +683,7 @@ int getLongDoubleFromObjectOrReply(client *c, robj *o, long double *target, cons
     return C_OK;
 }
 
+//将o中ptr指向的数据转化为longlong target
 int getLongLongFromObject(robj *o, long long *target) {
     long long value;
 
@@ -689,6 +691,7 @@ int getLongLongFromObject(robj *o, long long *target) {
         value = 0;
     } else {
         serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
+        //根据encoding类型获取存放的value
         if (sdsEncodedObject(o)) {
             if (string2ll(o->ptr,sdslen(o->ptr),&value) == 0) return C_ERR;
         } else if (o->encoding == OBJ_ENCODING_INT) {

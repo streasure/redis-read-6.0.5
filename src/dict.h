@@ -78,6 +78,7 @@ typedef struct dict {
     void *privdata;
     dictht ht[2];
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
+    //记录这个dict身上的迭代器个数，释放的时候需要检测这个
     unsigned long iterators; /* number of iterators currently running */
 } dict;
 
@@ -86,9 +87,11 @@ typedef struct dict {
  * iterating. Otherwise it is a non safe iterator, and only dictNext()
  * should be called while iterating. */
 typedef struct dictIterator {
-    dict *d;
+    dict *d;//dict数据实际存放地点
     long index;
+    //table代表检索的是哪一个hash表，为0或者1
     int table, safe;
+    //存放当前的entry和下一个entry
     dictEntry *entry, *nextEntry;
     /* unsafe iterator fingerprint for misuse detection. */
     long long fingerprint;

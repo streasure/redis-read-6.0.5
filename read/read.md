@@ -34,3 +34,7 @@ void *memcpy(void *str1, const void *str2, size_t n)从存储区str2复制n个�
 memmove函数原型
 void *memmove(void *str1, const void *str2, size_t n) 
 从str2复制n个字符到str1，但是在重叠内存块这方面，memmove()是比memcpy()更安全的方法。如果目标区域和源区域有重叠的话，memmove()能够保证源串在被覆盖之前将重叠区域的字节拷贝到目标区域中，复制后源区域的内容会被更改。如果目标区域与源区域没有重叠，则和memcpy()函数功能相同。
+
+isinf(arg)
+确定给定的浮点数arg是正的还是负的无穷大。该宏返回一个整数值。
+isnan()函数是cmath标头的库函数，用于检查给定的值是否为NaN(非数字)。 它接受一个值( float ， double或long double )，如果给定值为NaN，则返回1；否则，返回1。 0，否则。

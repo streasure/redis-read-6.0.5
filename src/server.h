@@ -788,7 +788,9 @@ typedef struct client {
                                replication stream that we are receiving from
                                the master. */
     size_t querybuf_peak;   /* Recent (100ms or more) peak of querybuf size. */
+    //client的arg数量
     int argc;               /* Num of arguments of current command. */
+    //redis-cli 传过来的参数列表
     robj **argv;            /* Arguments of current command. */
     struct redisCommand *cmd, *lastcmd;  /* Last command executed. */
     user *user;             /* User associated with this connection. If the
@@ -1528,12 +1530,14 @@ typedef struct {
  哈希上的迭代同时涉及字段和值。但是因为这两个都不是必需的，所以可以将指针存储在迭代器中，以避免为字段/值分配不必要的内存。
  */
 typedef struct {
+    //ziplist的数据存在subject的ptr
     robj *subject;
     int encoding;
-
+    //这个用于记录迭代到ziplist的元素位置，用于next操作
     unsigned char *fptr, *vptr;
-
+    //dict存放在di中的d中
     dictIterator *di;
+    //用于获取dict的元素指针，获取到的next元素就是存放在这个中的
     dictEntry *de;
 } hashTypeIterator;
 
