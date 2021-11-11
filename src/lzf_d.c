@@ -56,31 +56,36 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
 #endif
+//解压缩，将lzf压缩后的数据解压到之前的状态
+/*
+char是特殊的整型，相当于short，以ASCII码对应的整型数值存储~·
+可能需要对照着ascii码表去看
+*/
 unsigned int
 lzf_decompress (const void *const in_data,  unsigned int in_len,
                 void             *out_data, unsigned int out_len)
 {
-  u8 const *ip = (const u8 *)in_data;
-  u8       *op = (u8 *)out_data;
-  u8 const *const in_end  = ip + in_len;
-  u8       *const out_end = op + out_len;
+  u8 const *ip = (const u8 *)in_data;//原数据开始位置
+  u8       *op = (u8 *)out_data;//结果数据开始位置
+  u8 const *const in_end  = ip + in_len;//原数据结束位置
+  u8       *const out_end = op + out_len;//结果数据结束位置
 
   do
     {
-      unsigned int ctrl = *ip++;
+      unsigned int ctrl = *ip++;//迭代源数据的每一位的数据
 
-      if (ctrl < (1 << 5)) /* literal run */
+      if (ctrl < (1 << 5)) /* literal run 原文表示，因为值小于2^5，所以是原文表示*/
         {
           ctrl++;
 
-          if (op + ctrl > out_end)
+          if (op + ctrl > out_end)//是否超过缓冲区
             {
               SET_ERRNO (E2BIG);
               return 0;
             }
 
 #if CHECK_INPUT
-          if (ip + ctrl > in_end)
+          if (ip + ctrl > in_end)//如果当前位置加上将要解压的长度超过 输入的缓冲区，说明出错
             {
               SET_ERRNO (EINVAL);
               return 0;
@@ -90,7 +95,7 @@ lzf_decompress (const void *const in_data,  unsigned int in_len,
 #ifdef lzf_movsb
           lzf_movsb (op, ip, ctrl);
 #else
-          switch (ctrl)
+          switch (ctrl)//挨个拷贝原文字符串，C语言需要加break，不然会一直执行下去
             {
               case 32: *op++ = *ip++; case 31: *op++ = *ip++; case 30: *op++ = *ip++; case 29: *op++ = *ip++;
               case 28: *op++ = *ip++; case 27: *op++ = *ip++; case 26: *op++ = *ip++; case 25: *op++ = *ip++;
@@ -105,20 +110,20 @@ lzf_decompress (const void *const in_data,  unsigned int in_len,
         }
       else /* back reference */
         {
-          unsigned int len = ctrl >> 5;
+          unsigned int len = ctrl >> 5;//非原文字符，需要根据偏移量和长度来拷贝，首先获取长度或者控制字符
 
-          u8 *ref = op - ((ctrl & 0x1f) << 8) - 1;
+          u8 *ref = op - ((ctrl & 0x1f) << 8) - 1;//偏移量的高5位 再减去1，进行回退(真正的偏移量还差低字节)
 
 #if CHECK_INPUT
-          if (ip >= in_end)
+          if (ip >= in_end)// 如果已经到或者超过结束了，那么解压出错
             {
               SET_ERRNO (EINVAL);
               return 0;
             }
 #endif
-          if (len == 7)
+          if (len == 7)//如果是长序列压缩  7就是111就是长序列
             {
-              len += *ip++;
+              len += *ip++;//下一个字节就是长度
 #if CHECK_INPUT
               if (ip >= in_end)
                 {
@@ -128,22 +133,22 @@ lzf_decompress (const void *const in_data,  unsigned int in_len,
 #endif
             }
 
-          ref -= *ip++;
+          ref -= *ip++;//低字节的偏移量也要回退
 
-          if (op + len + 2 > out_end)
+          if (op + len + 2 > out_end)//当前位置加解压长度加2超过 输出缓冲区结尾，解压出错
             {
               SET_ERRNO (E2BIG);
               return 0;
             }
 
-          if (ref < (u8 *)out_data)
+          if (ref < (u8 *)out_data)// 如果引用值小于原字符序列开始值，解压也出错
             {
               SET_ERRNO (EINVAL);
               return 0;
             }
 
 #ifdef lzf_movsb
-          len += 2;
+          len += 2;// 长度值需要加2
           lzf_movsb (op, ref, len);
 #else
           switch (len)
@@ -152,13 +157,21 @@ lzf_decompress (const void *const in_data,  unsigned int in_len,
                 len += 2;
 
                 if (op >= ref + len)
+                /*
+                 如果当前操作符所在位置大于  引用值 + 当前解压长度 所在位置，
+                那么表示前面重复的数据已经全部解压出来，否则就有重叠的数据还没有解压出来，需要挨个解压
+                */
                   {
-                    /* disjunct areas */
-                    memcpy (op, ref, len);
+                    /* disjunct areas 分开区域 即 不重合区域*/
+                    memcpy (op, ref, len);//直接拷贝即可
                     op += len;
                   }
                 else
                   {
+                    /*
+                    重合区域，一个字节一个字节的拷贝，就是压缩的时候引用了自身，例如
+                  a123123123123abc,这里123123123就会被自身引用，导致数据直接拿过来就好
+                    */
                     /* overlapping, use octte by octte copying */
                     do
                       *op++ = *ref++;
@@ -176,7 +189,7 @@ lzf_decompress (const void *const in_data,  unsigned int in_len,
               case 3: *op++ = *ref++; /* fall-thru */
               case 2: *op++ = *ref++; /* fall-thru */
               case 1: *op++ = *ref++; /* fall-thru */
-              case 0: *op++ = *ref++; /* two octets more */
+              case 0: *op++ = *ref++; /* two octets more *///这里的两个字节就是加2的效果
                       *op++ = *ref++; /* fall-thru */
             }
 #endif

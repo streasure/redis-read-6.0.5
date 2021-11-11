@@ -58,7 +58,7 @@ unsigned char *ziplistDeleteRange(unsigned char *zl, int index, unsigned int num
 unsigned int ziplistCompare(unsigned char *p, unsigned char *s, unsigned int slen);
 //在列表中寻找p开始的值和*vstr一样的结点
 unsigned char *ziplistFind(unsigned char *p, unsigned char *vstr, unsigned int vlen, unsigned int skip);
-//返回列表的长度
+//返回ziplist中entry个数
 unsigned int ziplistLen(unsigned char *zl);
 //返回列表的占用的位数大小
 size_t ziplistBlobLen(unsigned char *zl);

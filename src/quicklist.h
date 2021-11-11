@@ -43,17 +43,31 @@
  * recompress: 1 bit, bool, true if node is temporarry decompressed for usage.
  * attempted_compress: 1 bit, boolean, used for verifying during testing.
  * extra: 10 bits, free for future use; pads out the remainder of 32 bits */
+//   sizeof(quicklistNode)=32
 typedef struct quicklistNode {
-    struct quicklistNode *prev;
-    struct quicklistNode *next;
-    unsigned char *zl;
-    unsigned int sz;             /* ziplist size in bytes */
-    unsigned int count : 16;     /* count of items in ziplist */
-    unsigned int encoding : 2;   /* RAW==1 or LZF==2 */
-    unsigned int container : 2;  /* NONE==1 or ZIPLIST==2 */
-    unsigned int recompress : 1; /* was this node previous compressed? */
-    unsigned int attempted_compress : 1; /* node can't compress; too small */
-    unsigned int extra : 10; /* more bits to steal for future usage */
+    struct quicklistNode *prev;//8 bytes 结构体指针 
+    struct quicklistNode *next;//8 bytes
+    //数据指针。如果当前节点的数据没有压缩，那么它指向一个ziplist结构；否则，它指向一个quicklistLZF结构。
+    unsigned char *zl;//1 bytes //字节对齐 8 bytes
+    //表示zl指向的ziplist的总大小（包括zlbytes, zltail, zllen, zlend和各个数据项）。需要注意的是：如果ziplist被压缩了，那么这个sz的值仍然是压缩前的ziplist大小。
+    unsigned int sz; //4 bytes            /* ziplist size in bytes */
+    /*************************下面的所有字节总共占用32位4字节，与上一个sz int型内存对齐************************************/
+    //ziplist中的item数量
+    unsigned int count : 16; //16 bits    /* count of items in ziplist */
+    //表示ziplist是否压缩了（以及用了哪个压缩算法）。目前只有两种取值：2表示被压缩了（而且用的是LZF压缩算法），1表示没有压缩。
+    unsigned int encoding : 2; // 2 bits  /* RAW==1 or LZF==2 */
+    /*
+    是一个预留字段。本来设计是用来表明一个quicklist节点下面是直接存数据，还是使用ziplist存数据，
+    或者用其它的结构来存数据（用作一个数据容器，所以叫container）。
+    但是，在目前的实现中，这个值是一个固定的值2，表示使用ziplist作为数据容器。
+    */
+    unsigned int container : 2; //2 bits /* NONE==1 or ZIPLIST==2 */
+    //当我们使用类似lindex这样的命令查看了某一项本来压缩的数据时，需要把数据暂时解压，这时就设置recompress=1做一个标记，等有机会再把数据重新压缩。
+    unsigned int recompress : 1; // 1 bits/* was this node previous compressed? */
+    //这个值只对Redis的自动化测试程序有用。我们不用管它。
+    unsigned int attempted_compress : 1; //1 bits/* node can't compress; too small */
+    //预留位
+    unsigned int extra : 10; //10 bits/* more bits to steal for future usage */
 } quicklistNode;
 
 /* quicklistLZF is a 4+N byte struct holding 'sz' followed by 'compressed'.
@@ -61,6 +75,11 @@ typedef struct quicklistNode {
  * 'compressed' is LZF data with total (compressed) length 'sz'
  * NOTE: uncompressed length is stored in quicklistNode->sz.
  * When quicklistNode->zl is compressed, node->zl points to a quicklistLZF */
+/*
+quicklistLZF结构表示一个被压缩过的ziplist。其中：
+sz: 表示压缩后的ziplist大小。
+compressed: 是个柔性数组（flexible array member），存放压缩后的ziplist字节数组。
+*/
 typedef struct quicklistLZF {
     unsigned int sz; /* LZF size in bytes*/
     char compressed[];
@@ -105,14 +124,23 @@ typedef struct quicklistBookmark {
 typedef struct quicklist {
     quicklistNode *head;
     quicklistNode *tail;
+    //所有ziplist数据项的个数总和。
     unsigned long count;        /* total count of all entries in all ziplists */
+    //quicklist节点的个数。
     unsigned long len;          /* number of quicklistNodes */
-    int fill : QL_FILL_BITS;              /* fill factor for individual nodes */
-    unsigned int compress : QL_COMP_BITS; /* depth of end nodes not to compress;0=off */
-    unsigned int bookmark_count: QL_BM_BITS;
+    //16bit，ziplist大小设置，存放list-max-ziplist-size参数的值。
+    /*
+    这个fill值如果>0,则这个quicklist在插入元素时，ziplist可被插入的判断条件位ziplist的长度有没有查过系统安全上限和节点的count有没有超过fill
+    如果小于0，由于之前设置的时候，最小就是-5，在使用的时候会进行-fill+1，则会在optimization_level这个表中看size是否满足ziplist的判定标准
+    static const size_t optimization_level[] = {4096, 8192, 16384, 32768, 65536};
+    */
+    int fill : QL_FILL_BITS;  //取值范围：[-5,2^15-1]            /* fill factor for individual nodes */
+    unsigned int compress : QL_COMP_BITS;//取值范围：[0,2^15-1] /* depth of end nodes not to compress;0=off */
+    unsigned int bookmark_count: QL_BM_BITS;//记录bookmarks中元素的数量
     quicklistBookmark bookmarks[];
 } quicklist;
 
+//quicklist迭代器结构
 typedef struct quicklistIter {
     const quicklist *quicklist;
     quicklistNode *current;
@@ -123,20 +151,20 @@ typedef struct quicklistIter {
 
 typedef struct quicklistEntry {
     const quicklist *quicklist;
-    quicklistNode *node;
-    unsigned char *zi;
+    quicklistNode *node;//操作的node
+    unsigned char *zi;//node中zl需要操作的entry位置
     unsigned char *value;
     long long longval;
     unsigned int sz;
-    int offset;
+    int offset;//向前或者向后的偏移量
 } quicklistEntry;
 
 #define QUICKLIST_HEAD 0
 #define QUICKLIST_TAIL -1
 
 /* quicklist node encodings */
-#define QUICKLIST_NODE_ENCODING_RAW 1
-#define QUICKLIST_NODE_ENCODING_LZF 2
+#define QUICKLIST_NODE_ENCODING_RAW 1//未压缩的zl
+#define QUICKLIST_NODE_ENCODING_LZF 2//lzf压缩过的zl
 
 /* quicklist compression disable */
 #define QUICKLIST_NOCOMPRESS 0
@@ -149,37 +177,52 @@ typedef struct quicklistEntry {
     ((node)->encoding == QUICKLIST_NODE_ENCODING_LZF)
 
 /* Prototypes */
+//创建一个新的quicklist并初始化
 quicklist *quicklistCreate(void);
+//使用默认参数生成一个新的quicklist,设置了fill和compress
 quicklist *quicklistNew(int fill, int compress);
+//设置quicklist的compress
 void quicklistSetCompressDepth(quicklist *quicklist, int depth);
+//设置quicklist的fill
 void quicklistSetFill(quicklist *quicklist, int fill);
+//设置quicklist的fill和compress
 void quicklistSetOptions(quicklist *quicklist, int fill, int depth);
+//释放quicklist
 void quicklistRelease(quicklist *quicklist);
+/*
+向头结点插入一个元素
+返回0代表使用的是原来的node
+返回1代表新创建了一个node
+新的node会成为新的head
+*/
 int quicklistPushHead(quicklist *quicklist, void *value, const size_t sz);
+/*
+向尾部节点插入一个元素
+返回0代表使用的是原来的node
+返回1代表新创建了一个node
+新的node会成为新的tail
+*/
 int quicklistPushTail(quicklist *quicklist, void *value, const size_t sz);
-void quicklistPush(quicklist *quicklist, void *value, const size_t sz,
-                   int where);
+//quicklist数据插入，根据where决定调用quicklistPushHead还是quicklistPushTail
+void quicklistPush(quicklist *quicklist, void *value, const size_t sz,int where);
+//在quicklist的tail之后插入一个新的node，node中元素为zl
 void quicklistAppendZiplist(quicklist *quicklist, unsigned char *zl);
-quicklist *quicklistAppendValuesFromZiplist(quicklist *quicklist,
-                                            unsigned char *zl);
-quicklist *quicklistCreateFromZiplist(int fill, int compress,
-                                      unsigned char *zl);
-void quicklistInsertAfter(quicklist *quicklist, quicklistEntry *node,
-                          void *value, const size_t sz);
-void quicklistInsertBefore(quicklist *quicklist, quicklistEntry *node,
-                           void *value, const size_t sz);
+// 将zl代表的ziplist中的entry全部插入到quicklist的尾节点
+quicklist *quicklistAppendValuesFromZiplist(quicklist *quicklist,unsigned char *zl);
+//用zl代表的ziplist创建一个初始化了fill和compress的quicklist
+quicklist *quicklistCreateFromZiplist(int fill, int compress, unsigned char *zl);
+
+void quicklistInsertAfter(quicklist *quicklist, quicklistEntry *node,void *value, const size_t sz);
+void quicklistInsertBefore(quicklist *quicklist, quicklistEntry *node, void *value, const size_t sz);
 void quicklistDelEntry(quicklistIter *iter, quicklistEntry *entry);
-int quicklistReplaceAtIndex(quicklist *quicklist, long index, void *data,
-                            int sz);
+int quicklistReplaceAtIndex(quicklist *quicklist, long index, void *data, int sz);
 int quicklistDelRange(quicklist *quicklist, const long start, const long stop);
 quicklistIter *quicklistGetIterator(const quicklist *quicklist, int direction);
-quicklistIter *quicklistGetIteratorAtIdx(const quicklist *quicklist,
-                                         int direction, const long long idx);
+quicklistIter *quicklistGetIteratorAtIdx(const quicklist *quicklist, int direction, const long long idx);
 int quicklistNext(quicklistIter *iter, quicklistEntry *node);
 void quicklistReleaseIterator(quicklistIter *iter);
 quicklist *quicklistDup(quicklist *orig);
-int quicklistIndex(const quicklist *quicklist, const long long index,
-                   quicklistEntry *entry);
+int quicklistIndex(const quicklist *quicklist, const long long index,quicklistEntry *entry);
 void quicklistRewind(quicklist *quicklist, quicklistIter *li);
 void quicklistRewindTail(quicklist *quicklist, quicklistIter *li);
 void quicklistRotate(quicklist *quicklist);

@@ -39,9 +39,12 @@
  * There is no need for the caller to increment the refcount of 'value' as
  * the function takes care of it if needed. */
 void listTypePush(robj *subject, robj *value, int where) {
+    //只适用与quicklist
     if (subject->encoding == OBJ_ENCODING_QUICKLIST) {
+        //判断位置是头还是尾
         int pos = (where == LIST_HEAD) ? QUICKLIST_HEAD : QUICKLIST_TAIL;
         value = getDecodedObject(value);
+        //获取value的len
         size_t len = sdslen(value->ptr);
         quicklistPush(subject->ptr, value->ptr, len, pos);
         decrRefCount(value);
