@@ -513,6 +513,7 @@ REDIS_STATIC int _quicklistNodeAllowInsert(const quicklistNode *node,
         return 0;
 }
 
+//判断两个ziplist是否可以被合并
 REDIS_STATIC int _quicklistNodeAllowMerge(const quicklistNode *a,
                                           const quicklistNode *b,
                                           const int fill) {
@@ -521,6 +522,8 @@ REDIS_STATIC int _quicklistNodeAllowMerge(const quicklistNode *a,
 
     /* approximate merged ziplist size (- 11 to remove one ziplist
      * header/trailer) */
+     //ziplist的head+tail的长度就是11个字节head=32*2+16,tail=8
+     //这个就是两个zip总长度，但是感觉漏了第二个ziplist的首元素的prev长度的空间需求
     unsigned int merge_sz = a->sz + b->sz - 11;
     if (likely(_quicklistNodeSizeMeetsOptimizationRequirement(merge_sz, fill)))
         return 1;
@@ -670,17 +673,19 @@ quicklist *quicklistCreateFromZiplist(int fill, int compress,
         }                                                                      \
     } while (0)
 
+//quicklist删除值为node的节点，同步更新bookmark和bookcount
 REDIS_STATIC void __quicklistDelNode(quicklist *quicklist,
                                      quicklistNode *node) {
     /* Update the bookmark if any */
+    //找到bookmark中的node，同步更新bookmark中的信息
     quicklistBookmark *bm = _quicklistBookmarkFindByNode(quicklist, node);
-    if (bm) {
-        bm->node = node->next;
+    if (bm) {//如果有
+        bm->node = node->next;//这个元素置为node的next
         /* if the bookmark was to the last node, delete it. */
-        if (!bm->node)
+        if (!bm->node)//如果next没有
             _quicklistBookmarkDelete(quicklist, bm);
     }
-
+    //双向链表删除节点的常规操作
     if (node->next)
         node->next->prev = node->prev;
     if (node->prev)
@@ -696,12 +701,14 @@ REDIS_STATIC void __quicklistDelNode(quicklist *quicklist,
 
     /* If we deleted a node within our compress depth, we
      * now have compressed nodes needing to be decompressed. */
+    //对所有node进行decode，并将compress（建立在depth满足的情况下）位置的节点encode
     __quicklistCompress(quicklist, NULL);
-
+    //count更新
     quicklist->count -= node->count;
-
+    //释放node
     zfree(node->zl);
     zfree(node);
+    //修改quicklist的节点数
     quicklist->len--;
 }
 
@@ -795,6 +802,7 @@ int quicklistReplaceAtIndex(quicklist *quicklist, long index, void *data,
  *
  * Returns the input node picked to merge against or NULL if
  * merging was not possible. */
+//将quicklist的a和b合并，并将其中元素少的一个删除，返回最新的节点
 REDIS_STATIC quicklistNode *_quicklistZiplistMerge(quicklist *quicklist,
                                                    quicklistNode *a,
                                                    quicklistNode *b) {
@@ -802,6 +810,7 @@ REDIS_STATIC quicklistNode *_quicklistZiplistMerge(quicklist *quicklist,
 
     quicklistDecompressNode(a);
     quicklistDecompressNode(b);
+    //合并a和b，返回的数据在数据较多的ziplist上，另外一个会被删除释放
     if ((ziplistMerge(&a->zl, &b->zl))) {
         /* We merged ziplists! Now remove the unused quicklistNode. */
         quicklistNode *keep = NULL, *nokeep = NULL;
@@ -812,11 +821,14 @@ REDIS_STATIC quicklistNode *_quicklistZiplistMerge(quicklist *quicklist,
             nokeep = b;
             keep = a;
         }
+        //重新计算count
         keep->count = ziplistLen(keep->zl);
         quicklistNodeUpdateSz(keep);
-
+        //zl已被释放所以没有元素
         nokeep->count = 0;
+        //删除节点
         __quicklistDelNode(quicklist, nokeep);
+        //压缩新node
         quicklistCompress(quicklist, keep);
         return keep;
     } else {
@@ -833,12 +845,27 @@ REDIS_STATIC quicklistNode *_quicklistZiplistMerge(quicklist *quicklist,
  *   - (center->prev, center)
  *   - (center, center->next)
  */
+//尝试将center为中心的前后共五个节点看看可不可以合并为一个节点
+/*
+以下几步尝试
+1.将prev和prev->prev合并
+2.将next和next->next合并
+3.将prev和center合并
+4.将center和next合并
+*/
 REDIS_STATIC void _quicklistMergeNodes(quicklist *quicklist,
                                        quicklistNode *center) {
     int fill = quicklist->fill;
+    /*
+    *prev //center的前置节点
+    *prev_prev //center前置的前置节点
+    *next //center的后置节点
+    *next_next //center后置的后置节点
+    *target
+    */
     quicklistNode *prev, *prev_prev, *next, *next_next, *target;
     prev = prev_prev = next = next_next = target = NULL;
-
+    //初始化上面的变量
     if (center->prev) {
         prev = center->prev;
         if (center->prev->prev)
@@ -852,18 +879,21 @@ REDIS_STATIC void _quicklistMergeNodes(quicklist *quicklist,
     }
 
     /* Try to merge prev_prev and prev */
+    //如果可以前面两个node可以被合并
     if (_quicklistNodeAllowMerge(prev, prev_prev, fill)) {
+        //将前两个node合并
         _quicklistZiplistMerge(quicklist, prev_prev, prev);
         prev_prev = prev = NULL; /* they could have moved, invalidate them. */
     }
 
     /* Try to merge next and next_next */
-    if (_quicklistNodeAllowMerge(next, next_next, fill)) {
+    if (_quicklistNodeAllowMerge(next, next_next, fill)) {//合并后两个可以合并的node
         _quicklistZiplistMerge(quicklist, next, next_next);
         next = next_next = NULL; /* they could have moved, invalidate them. */
     }
 
     /* Try to merge center node and previous node */
+    //合并center和前置节点
     if (_quicklistNodeAllowMerge(center, center->prev, fill)) {
         target = _quicklistZiplistMerge(quicklist, center->prev, center);
         center = NULL; /* center could have been deleted, invalidate it. */
@@ -873,6 +903,7 @@ REDIS_STATIC void _quicklistMergeNodes(quicklist *quicklist,
     }
 
     /* Use result of center merge (or original) to merge with next node. */
+    //看能不能和后一个节点合并
     if (_quicklistNodeAllowMerge(target, target->next, fill)) {
         _quicklistZiplistMerge(quicklist, target, target->next);
     }
@@ -897,29 +928,46 @@ REDIS_STATIC void _quicklistMergeNodes(quicklist *quicklist,
  * The input node keeps all elements not taken by the returned node.
  *
  * Returns newly created node or NULL if split not possible. */
-REDIS_STATIC quicklistNode *_quicklistSplitNode(quicklistNode *node, int offset,
-                                                int after) {
+//将node分成两个node
+/*
+after=0 原node保存0-offset之间的数据 newnode存offset+1~-1之间的数据
+after=1 相反
+*/
+REDIS_STATIC quicklistNode *_quicklistSplitNode(quicklistNode *node, int offset,int after) {
+    //记录长度
     size_t zl_sz = node->sz;
-
+    //创建一个新的node
     quicklistNode *new_node = quicklistCreateNode();
+    //申请和原节点相同大小的空间
     new_node->zl = zmalloc(zl_sz);
-
     /* Copy original ziplist so we can split it */
+    //将原node的zl数据拷贝到新node
     memcpy(new_node->zl, node->zl, zl_sz);
 
     /* -1 here means "continue deleting until the list ends" */
+    //开始位置
     int orig_start = after ? offset + 1 : 0;
+    //偏移位数
     int orig_extent = after ? -1 : offset;
+    //新开始位置
     int new_start = after ? 0 : offset;
+    //新偏移位数
     int new_extent = after ? offset + 1 : -1;
 
     D("After %d (%d); ranges: [%d, %d], [%d, %d]", after, offset, orig_start,
       orig_extent, new_start, new_extent);
-
+    //注意ziplistDeleteRange最后一个参数的类型就知道后删为什么传-1
+    /*
+    根据after决定原node保留后一段数据还是前一段数据
+    after=0保留0-offset之间的数据
+    after=1保留offset+1，-1之间的数据
+    */
     node->zl = ziplistDeleteRange(node->zl, orig_start, orig_extent);
+    //对node元素个数重新计算
     node->count = ziplistLen(node->zl);
+    //更新node的长度信息
     quicklistNodeUpdateSz(node);
-
+    //将node保留的元素在newnode中去除
     new_node->zl = ziplistDeleteRange(new_node->zl, new_start, new_extent);
     new_node->count = ziplistLen(new_node->zl);
     quicklistNodeUpdateSz(new_node);
@@ -932,6 +980,7 @@ REDIS_STATIC quicklistNode *_quicklistSplitNode(quicklistNode *node, int offset,
  *
  * If after==1, the new value is inserted after 'entry', otherwise
  * the new value is inserted before 'entry'. */
+//将value根据after插入到entry指向的node中
 REDIS_STATIC void _quicklistInsert(quicklist *quicklist, quicklistEntry *entry,
                                    void *value, const size_t sz, int after) {
     int full = 0, at_tail = 0, at_head = 0, full_next = 0, full_prev = 0;
@@ -1050,25 +1099,30 @@ REDIS_STATIC void _quicklistInsert(quicklist *quicklist, quicklistEntry *entry,
         /* covers both after and !after cases */
         D("\tsplitting node...");
         quicklistDecompressNodeForUse(node);
-        //TODO read here
+        //将node拆开，根据after和offset分割元素
         new_node = _quicklistSplitNode(node, entry->offset, after);
+        //根据after将value插入新node的头或者尾
         new_node->zl = ziplistPush(new_node->zl, value, sz,
                                    after ? ZIPLIST_HEAD : ZIPLIST_TAIL);
+        //更新新节点的相关数据
         new_node->count++;
         quicklistNodeUpdateSz(new_node);
+        //根据after将新的node拆入到老node的前或者后
         __quicklistInsertNode(quicklist, node, new_node, after);
+        //尝试合并前后共五个节点
         _quicklistMergeNodes(quicklist, node);
     }
-
+    //元素个数+1
     quicklist->count++;
 }
 
+//向entry指向的node中zl头部插入value
 void quicklistInsertBefore(quicklist *quicklist, quicklistEntry *entry,
                            void *value, const size_t sz) {
     _quicklistInsert(quicklist, entry, value, sz, 0);
 }
 
-
+//向entry指向的node中zl末尾插入value
 void quicklistInsertAfter(quicklist *quicklist, quicklistEntry *entry,
                           void *value, const size_t sz) {
     _quicklistInsert(quicklist, entry, value, sz, 1);
@@ -1590,6 +1644,7 @@ quicklistBookmark *_quicklistBookmarkFindByName(quicklist *ql, const char *name)
     return NULL;
 }
 
+//找到quiclklist里bookmark中存放node的地方
 quicklistBookmark *_quicklistBookmarkFindByNode(quicklist *ql, quicklistNode *node) {
     unsigned i;
     for (i=0; i<ql->bookmark_count; i++) {
@@ -1600,10 +1655,16 @@ quicklistBookmark *_quicklistBookmarkFindByNode(quicklist *ql, quicklistNode *no
     return NULL;
 }
 
+//删除quicklist bookmark中一个元素
 void _quicklistBookmarkDelete(quicklist *ql, quicklistBookmark *bm) {
+    //偏移地址就是下标
     int index = bm - ql->bookmarks;
+    //释放name，这个情况下node已经为空了
     zfree(bm->name);
+    //节点数-1
     ql->bookmark_count--;
+    //数据是个数组，内存是一段连续的空间，将后面的内存向前覆盖即可
+    //好像会有空间多余
     memmove(bm, bm+1, (ql->bookmark_count - index)* sizeof(*bm));
     /* NOTE: We do not shrink (realloc) the quicklist yet (to avoid resonance,
      * it may be re-used later (a call to realloc may NOP). */

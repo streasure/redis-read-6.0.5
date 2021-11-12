@@ -211,8 +211,9 @@ void quicklistAppendZiplist(quicklist *quicklist, unsigned char *zl);
 quicklist *quicklistAppendValuesFromZiplist(quicklist *quicklist,unsigned char *zl);
 //用zl代表的ziplist创建一个初始化了fill和compress的quicklist
 quicklist *quicklistCreateFromZiplist(int fill, int compress, unsigned char *zl);
-
+//向entry指向的node中zl末尾插入value
 void quicklistInsertAfter(quicklist *quicklist, quicklistEntry *node,void *value, const size_t sz);
+//向entry指向的node中zl头部插入value
 void quicklistInsertBefore(quicklist *quicklist, quicklistEntry *node, void *value, const size_t sz);
 void quicklistDelEntry(quicklistIter *iter, quicklistEntry *entry);
 int quicklistReplaceAtIndex(quicklist *quicklist, long index, void *data, int sz);
