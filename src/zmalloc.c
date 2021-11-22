@@ -182,7 +182,7 @@ void *zcalloc(size_t size) {
 }
 /*
 要完成的功能是给首地址ptr的内存空间，重新分配大小。如果失败了，
-则在其它位置新建一块大小为size字节的空间，将原先的数据复制到新的内存空间，
+则在其它位置新建一块大小为size字节的空间，原数据不变
 并返回这段内存首地址【原内存会被系统自然释放】。
 */
 void *zrealloc(void *ptr, size_t size) {
@@ -210,7 +210,7 @@ void *zrealloc(void *ptr, size_t size) {
 #else
     realptr = (char*)ptr-PREFIX_SIZE;
     oldsize = *((size_t*)realptr);//获取这个指针原始的长度
-    newptr = realloc(realptr,size+PREFIX_SIZE);//重新对这个指针分配空间
+    newptr = realloc(realptr,size+PREFIX_SIZE);//重新对这个指针分配空间，数据不会收到影响
     if (!newptr) zmalloc_oom_handler(size);//分配失败处理
 
     *((size_t*)newptr) = size;//将这个长度赋值给特征字段

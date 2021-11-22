@@ -136,7 +136,7 @@ typedef struct quicklist {
     */
     int fill : QL_FILL_BITS;  //取值范围：[-5,2^15-1]            /* fill factor for individual nodes */
     unsigned int compress : QL_COMP_BITS;//取值范围：[0,2^15-1] /* depth of end nodes not to compress;0=off */
-    unsigned int bookmark_count: QL_BM_BITS;//记录bookmarks中元素的数量
+    unsigned int bookmark_count: QL_BM_BITS;//记录bookmarks中元素的数量[0-15]
     quicklistBookmark bookmarks[];
 } quicklist;
 
@@ -144,9 +144,9 @@ typedef struct quicklist {
 typedef struct quicklistIter {
     const quicklist *quicklist;
     quicklistNode *current;
-    unsigned char *zi;
+    unsigned char *zi;//初始化的时候为NULL
     long offset; /* offset in current ziplist */
-    int direction;
+    int direction;//开始迭代的位置，头或者尾，如果current被删除则需要将current指向next或者prev
 } quicklistIter;
 
 typedef struct quicklistEntry {
@@ -215,31 +215,51 @@ quicklist *quicklistCreateFromZiplist(int fill, int compress, unsigned char *zl)
 void quicklistInsertAfter(quicklist *quicklist, quicklistEntry *node,void *value, const size_t sz);
 //向entry指向的node中zl头部插入value
 void quicklistInsertBefore(quicklist *quicklist, quicklistEntry *node, void *value, const size_t sz);
+//删除entry这个node的ziplist中zi所在位置的元素，并更新iter的node和offset
 void quicklistDelEntry(quicklistIter *iter, quicklistEntry *entry);
+//替换quicklist位于index位置的元素，index正负代表头部还是尾部第几位
 int quicklistReplaceAtIndex(quicklist *quicklist, long index, void *data, int sz);
+//删除quicklist在index位之后的stop个元素
 int quicklistDelRange(quicklist *quicklist, const long start, const long stop);
+//根据direction获取这个quicklist的iter
 quicklistIter *quicklistGetIterator(const quicklist *quicklist, int direction);
+//获取quicklist位于idx位置元素的iter
 quicklistIter *quicklistGetIteratorAtIdx(const quicklist *quicklist, int direction, const long long idx);
+//获取iter这个迭代器所在quicklist的node根据direction的zi的下一个元素
 int quicklistNext(quicklistIter *iter, quicklistEntry *node);
+//释放iter，需要对iter所在的node做压缩
 void quicklistReleaseIterator(quicklistIter *iter);
+//拷贝quicklist
 quicklist *quicklistDup(quicklist *orig);
+//查找quicklist在index位置的元素，数据放入entry中
 int quicklistIndex(const quicklist *quicklist, const long long index,quicklistEntry *entry);
+//下面两个找不到函数
 void quicklistRewind(quicklist *quicklist, quicklistIter *li);
 void quicklistRewindTail(quicklist *quicklist, quicklistIter *li);
+//将尾节点的尾元素放到头节点的最开始位置
 void quicklistRotate(quicklist *quicklist);
+//从quicklist中的头或者尾pop一个元素出来，存在data或者sval
 int quicklistPopCustom(quicklist *quicklist, int where, unsigned char **data,
                        unsigned int *sz, long long *sval,
                        void *(*saver)(unsigned char *data, unsigned int sz));
+//调用quicklistPopCustom获取quicklist中的头部元素或者尾部元素，返回quicklistPopCustom的返回值
 int quicklistPop(quicklist *quicklist, int where, unsigned char **data,
                  unsigned int *sz, long long *slong);
+//获取quicklist的元素个数
 unsigned long quicklistCount(const quicklist *ql);
+//比较ziplist中p1指向的元素和p2指向的元素是否相同
 int quicklistCompare(unsigned char *p1, unsigned char *p2, int p2_len);
+//获取quicklist这个node压缩过的quicklistLZF数据
 size_t quicklistGetLzf(const quicklistNode *node, void **data);
 
 /* bookmarks */
+//在bookmark中插入name和node代表的bookmark node
 int quicklistBookmarkCreate(quicklist **ql_ref, const char *name, quicklistNode *node);
+//删除bookmark中值为name的元素，返回0代表没找到，返回1代表删除成功
 int quicklistBookmarkDelete(quicklist *ql, const char *name);
+//找到bookmark中值为name的元素中所指向的node
 quicklistNode *quicklistBookmarkFind(quicklist *ql, const char *name);
+//删除这个bookmark但是不释放bookmark的指针，只释放元素
 void quicklistBookmarksClear(quicklist *ql);
 
 #ifdef REDIS_TEST

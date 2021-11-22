@@ -46,7 +46,7 @@ unsigned char *ziplistIndex(unsigned char *zl, int index);
 unsigned char *ziplistNext(unsigned char *zl, unsigned char *p);
 //获取当期列表位置的前一个值
 unsigned char *ziplistPrev(unsigned char *zl, unsigned char *p);
-//获取列表的信息
+//获取p为首地址的entry中存放的数据，**sstr代表的是字符串的值，*sval代表的是数字
 unsigned int ziplistGet(unsigned char *p, unsigned char **sval, unsigned int *slen, long long *lval);
 //向列表中插入数据，与ziplistPush一个道理
 unsigned char *ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen);
