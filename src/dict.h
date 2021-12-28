@@ -49,7 +49,7 @@ typedef struct dictEntry {
     union {
         void *val;
         uint64_t u64;
-        int64_t s64;
+        int64_t s64;//过期时间记录在这
         double d;
     } v;
     struct dictEntry *next;

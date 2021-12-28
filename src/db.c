@@ -53,14 +53,17 @@ void updateLFU(robj *val) {
  * implementations that should instead rely on lookupKeyRead(),
  * lookupKeyWrite() and lookupKeyReadWithFlags(). */
 robj *lookupKey(redisDb *db, robj *key, int flags) {
+    //在db所在的hash表中查找key是否存在，db中key的存储是在dict中
     dictEntry *de = dictFind(db->dict,key->ptr);
-    if (de) {
-        robj *val = dictGetVal(de);
+    if (de) {//如果存在
+        robj *val = dictGetVal(de);//获取这个key的元素
 
         /* Update the access time for the ageing algorithm.
          * Don't do it if we have a saving child, as this will trigger
          * a copy on write madness. */
+        //没有后台保存的进程，并且flag不为LOOKUP_NOTOUCH
         if (!hasActiveChildProcess() && !(flags & LOOKUP_NOTOUCH)){
+            //判断内存策略
             if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
                 updateLFU(val);
             } else {
@@ -68,7 +71,7 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
             }
         }
         return val;
-    } else {
+    } else {//不存在返回null
         return NULL;
     }
 }
@@ -154,10 +157,12 @@ robj *lookupKeyRead(redisDb *db, robj *key) {
  * Returns the linked value object if the key exists or NULL if the key
  * does not exist in the specified DB. */
 robj *lookupKeyWriteWithFlags(redisDb *db, robj *key, int flags) {
+    //是否过期
     expireIfNeeded(db,key);
     return lookupKey(db,key,flags);
 }
 
+//在db中查找key，返回所需的数据
 robj *lookupKeyWrite(redisDb *db, robj *key) {
     return lookupKeyWriteWithFlags(db, key, LOOKUP_NONE);
 }
@@ -1210,16 +1215,19 @@ void setExpire(client *c, redisDb *db, robj *key, long long when) {
 
 /* Return the expire time of the specified key, or -1 if no expire
  * is associated with this key (i.e. the key is non volatile) */
+//获取这个db中key的过期时间，找不到返回-1
 long long getExpire(redisDb *db, robj *key) {
     dictEntry *de;
 
     /* No expire? return ASAP */
+    //如果数据库中没有过期的key，或者再过期的key中找不到key所对应的值
     if (dictSize(db->expires) == 0 ||
        (de = dictFind(db->expires,key->ptr)) == NULL) return -1;
-
+    //de在上面已经赋值了
     /* The entry was found in the expire dict, this means it should also
      * be present in the main dict (safety check). */
     serverAssertWithInfo(NULL,key,dictFind(db->dict,key->ptr) != NULL);
+    //获取s64
     return dictGetSignedIntegerVal(de);
 }
 
@@ -1231,18 +1239,25 @@ long long getExpire(redisDb *db, robj *key) {
  * AOF and the master->slave link guarantee operation ordering, everything
  * will be consistent even if we allow write operations against expiring
  * keys. */
+/*
+将过期信息广播到所有的从库和aof中
+如果master中的key过期了，del操作会广播到所有的从库和可以被写入的aof文件中
+所有的过期都集中在一个地方，由于主从模式和aof都可保证操作顺序性，所以即使我们允许对一个过期的key进行写操作，最后数据也是一致的
+*/
+//根据lazy策略处理过期的key
 void propagateExpire(redisDb *db, robj *key, int lazy) {
     robj *argv[2];
-
+    //根据lazy选择这个key是不可达还是删除
     argv[0] = lazy ? shared.unlink : shared.del;
     argv[1] = key;
+    //引用计数++
     incrRefCount(argv[0]);
     incrRefCount(argv[1]);
-
-    if (server.aof_state != AOF_OFF)
+    //判断redis的aof状态
+    if (server.aof_state != AOF_OFF)//如果正在aof过程中，将命令加到file中
         feedAppendOnlyFile(server.delCommand,db->id,argv,2);
     replicationFeedSlaves(server.slaves,db->id,argv,2);
-
+    //引用计数--
     decrRefCount(argv[0]);
     decrRefCount(argv[1]);
 }
@@ -1250,12 +1265,14 @@ void propagateExpire(redisDb *db, robj *key, int lazy) {
 /* Check if the key is expired. */
 //判断key是否过期
 int keyIsExpired(redisDb *db, robj *key) {
+    //获取key所存的过期时间
     mstime_t when = getExpire(db,key);
     mstime_t now;
-
+    //如果是-1，代表这个key不为设置了过期时间的key
     if (when < 0) return 0; /* No expire for this key */
 
     /* Don't expire anything while loading. It will be done later. */
+    //如果正在loading阶段，则不处理过期
     if (server.loading) return 0;
 
     /* If we are in the context of a Lua script, we pretend that time is
@@ -1263,6 +1280,7 @@ int keyIsExpired(redisDb *db, robj *key) {
      * only the first time it is accessed and not in the middle of the
      * script execution, making propagation to slaves / AOF consistent.
      * See issue #1525 on Github for more information. */
+    //如果在一个lua的调用中则时间取值为lua context的调用开始时间
     if (server.lua_caller) {
         now = server.lua_time_start;
     }
@@ -1273,16 +1291,22 @@ int keyIsExpired(redisDb *db, robj *key) {
      * may re-open the same key multiple times, can invalidate an already
      * open object in a next call, if the next call will see the key expired,
      * while the first did not. */
+    /*
+    如果我们在命令执行的中途，我们会希望使用一个不会呗改变的时间，这样我们在每次call的时候只需要使用缓存的时间就可以了
+    这样我们就可以避免多次对同一个key的处理，上一次还是存在的，下一次就过期了
+    */
     else if (server.fixed_time_expire > 0) {
         now = server.mstime;
     }
     /* For the other cases, we want to use the most fresh time we have. */
+    //剩下的就用最新的时间，进度在毫秒级别
     else {
         now = mstime();
     }
 
     /* The key expired if the current (virtual or real) time is greater
      * than the expire time of the key. */
+    //判断当前时间和过期时间的大小
     return now > when;
 }
 
@@ -1305,7 +1329,9 @@ int keyIsExpired(redisDb *db, robj *key) {
  *
  * The return value of the function is 0 if the key is still valid,
  * otherwise the function returns 1 if the key is expired. */
+//返回值0代表没过期，1代表已过期
 int expireIfNeeded(redisDb *db, robj *key) {
+    //判断key是否过期
     if (!keyIsExpired(db,key)) return 0;
 
     /* If we are running in the context of a slave, instead of
@@ -1316,11 +1342,16 @@ int expireIfNeeded(redisDb *db, robj *key) {
      * Still we try to return the right information to the caller,
      * that is, 0 if we think the key should be still valid, 1 if
      * we think the key is expired at this time. */
+    //如果我们在从库的上下文中获取值而不是在数据库中获取，会尽快返回，因为从库的操作受主库控制，但我们还是会返回正确的值给调用者
+    //从库直接返回因为没有必要对过期key做操作，所有操作有主库做，从库只做同步
     if (server.masterhost != NULL) return 1;
 
     /* Delete the key */
+    //删除计数++
     server.stat_expiredkeys++;
+    //根据过期策略做key过期处理
     propagateExpire(db,key,server.lazyfree_lazy_expire);
+    //推送key过期
     notifyKeyspaceEvent(NOTIFY_EXPIRED,
         "expired",key,db->id);
     int retval = server.lazyfree_lazy_expire ? dbAsyncDelete(db,key) :

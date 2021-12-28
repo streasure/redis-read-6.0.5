@@ -1,4 +1,4 @@
-realloc 
+# realloc 
        原型：extern void *realloc(void *mem_address, unsigned int newsize); 
        用法：#include <stdlib.h> 有些编译器需要#include <alloc.h> 
        功能：改变mem_address所指内存区域的大小为newsize长度。 
@@ -13,7 +13,7 @@ realloc
             老块被放回堆上。新分配的内存中的数据不可知 
             3、也可用来缩小长度
 
-memcmp函数原型
+# memcmp函数原型
      int memcmp(const void *str1, const void *str2, size_t n));
 参数
      str1-- 指向内存块的指针。
@@ -26,20 +26,20 @@ memcmp函数原型
      如果返回值 > 0，则表示 str2 小于 str1。
      如果返回值 = 0，则表示 str1 等于 str2。
 
-memcpy函数原型
+# memcpy函数原型
 void *memcpy(void *str1, const void *str2, size_t n)从存储区str2复制n个字节到存储区str1。
 返回值
 该函数返回一个指向目标存储区 str1 的指针。
 
-memmove函数原型
+# memmove函数原型
 void *memmove(void *str1, const void *str2, size_t n) 
 从str2复制n个字符到str1，但是在重叠内存块这方面，memmove()是比memcpy()更安全的方法。如果目标区域和源区域有重叠的话，memmove()能够保证源串在被覆盖之前将重叠区域的字节拷贝到目标区域中，复制后源区域的内容会被更改。如果目标区域与源区域没有重叠，则和memcpy()函数功能相同。
 
-isinf(arg)
+# isinf(arg)
 确定给定的浮点数arg是正的还是负的无穷大。该宏返回一个整数值。
 isnan()函数是cmath标头的库函数，用于检查给定的值是否为NaN(非数字)。 它接受一个值( float ， double或long double )，如果给定值为NaN，则返回1；否则，返回1。 0，否则。
 
-likely和unlikely
+# likely和unlikely
 对于条件选择语句，gcc内建了一条指令用于优化，在一个条件经常出现，或者该条件很少出现的时候，编译器可以根据这条指令对条件分支选择进行优化。内核把这条指令封装成了宏，比如likely()和unlikely()，这样使用起来比较方便。
 例如，下面是一个条件选择语句：
 if (foo) {
@@ -54,4 +54,23 @@ if (unlikely(foo)) {
 /* 我们认为foo通常都不会为0 */
 if  (likely(foo)) {
       /* .. */
+}
+
+# gettimeofday()
+gettimeofday是计算机函数，使用C语言编写程序需要获得当前精确时间（1970年1月1日到现在的时间），或者为执行计时，可以使用gettimeofday()函数。
+
+# snprintf()
+函数原型为int snprintf(char *str, size_t size, const char *format, ...)。
+将可变个参数(...)按照format格式化成字符串，然后将其复制到str中。
+(1) 如果格式化后的字符串长度 < size，则将此字符串全部复制到str中，并给其后添加一个字符串结束符('\0')；
+(2) 如果格式化后的字符串长度 >= size，则只将其中的(size-1)个字符复制到str中，并给其后添加一个字符串结束符('\0')，返回值为欲写入的字符串长度。
+#include <stdio.h>
+int main () {
+  char a[16];
+  size_t i;
+  i = snprintf(a, 13, "%012d", 12345);  // 第 1 种情况
+  printf("i = %lu, a = %s\n", i, a);    // 输出：i = 12, a = 000000012345
+  i = snprintf(a, 9, "%012d", 12345);   // 第 2 种情况
+  printf("i = %lu, a = %s\n", i, a);    // 输出：i = 12, a = 00000001
+  return 0;
 }

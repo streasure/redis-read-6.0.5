@@ -366,8 +366,8 @@ typedef long long ustime_t; /* microsecond time type. */
 /* Redis maxmemory strategies. Instead of using just incremental number
  * for this defines, we use a set of flags so that testing for certain
  * properties common to multiple policies is faster. */
-#define MAXMEMORY_FLAG_LRU (1<<0)
-#define MAXMEMORY_FLAG_LFU (1<<1)
+#define MAXMEMORY_FLAG_LRU (1<<0)//LRU (Least recently used) 最近最少使用
+#define MAXMEMORY_FLAG_LFU (1<<1)//LFU (Least frequently used) 最不经常使用
 #define MAXMEMORY_FLAG_ALLKEYS (1<<2)
 #define MAXMEMORY_FLAG_NO_SHARED_INTEGERS \
     (MAXMEMORY_FLAG_LRU|MAXMEMORY_FLAG_LFU)
@@ -614,13 +614,13 @@ typedef struct RedisModuleDigest {
 #define OBJ_STATIC_REFCOUNT (INT_MAX-1) /* Object allocated in the stack. */
 #define OBJ_FIRST_SPECIAL_REFCOUNT OBJ_STATIC_REFCOUNT
 typedef struct redisObject {
-    unsigned type:4;
-    unsigned encoding:4;
+    unsigned type:4;//类型
+    unsigned encoding:4;//压缩方式
     unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
                             * LFU data (least significant 8 bits frequency
                             * and most significant 16 bits access time). */
-    int refcount;
-    void *ptr;
+    int refcount;//引用计数
+    void *ptr;//数据
 } robj;
 
 /* The a string name for an object's type as listed above
@@ -881,11 +881,11 @@ struct sharedObjectsStruct {
     *outofrangeerr, *noscripterr, *loadingerr, *slowscripterr, *bgsaveerr,
     *masterdownerr, *roslaveerr, *execaborterr, *noautherr, *noreplicaserr,
     *busykeyerr, *oomerr, *plus, *messagebulk, *pmessagebulk, *subscribebulk,
-    *unsubscribebulk, *psubscribebulk, *punsubscribebulk, *del, *unlink,
+    *unsubscribebulk, *psubscribebulk, *punsubscribebulk, *del, *unlink/*设置为不可达，防止删除的key过大导致性能下降，留给后台慢慢删*/,
     *rpop, *lpop, *lpush, *rpoplpush, *zpopmin, *zpopmax, *emptyscan,
     *multi, *exec,
     *select[PROTO_SHARED_SELECT_CMDS],
-    *integers[OBJ_SHARED_INTEGERS],
+    *integers[OBJ_SHARED_INTEGERS],//0~10000的整数共享变量存储位置
     *mbulkhdr[OBJ_SHARED_BULKHDR_LEN], /* "*<value>\r\n" */
     *bulkhdr[OBJ_SHARED_BULKHDR_LEN];  /* "$<value>\r\n" */
     sds minstring, maxstring;
@@ -1126,7 +1126,7 @@ struct redisServer {
     time_t stat_starttime;          /* Server start time */
     long long stat_numcommands;     /* Number of processed commands */
     long long stat_numconnections;  /* Number of connections received */
-    long long stat_expiredkeys;     /* Number of expired keys */
+    long long stat_expiredkeys;     /* Number of expired keys *///已经过期的key数量
     double stat_expired_stale_perc; /* Percentage of keys probably expired */
     long long stat_expired_time_cap_reached_count; /* Early expire cylce stops.*/
     long long stat_expire_cycle_time_used; /* Cumulative microseconds used. */
@@ -1276,24 +1276,26 @@ struct redisServer {
     long long second_replid_offset; /* Accept offsets up to this for replid2. */
     int slaveseldb;                 /* Last SELECTed DB in replication output */
     int repl_ping_slave_period;     /* Master pings the slave every N seconds */
-    char *repl_backlog;             /* Replication backlog for partial syncs */
-    long long repl_backlog_size;    /* Backlog circular buffer size */
-    long long repl_backlog_histlen; /* Backlog actual data length */
+    char *repl_backlog;             /* Replication backlog for partial syncs *///环形缓冲赋值队列
+    long long repl_backlog_size;    /* Backlog circular buffer size *///环形缓冲赋值队列容量
+    long long repl_backlog_histlen; /* Backlog actual data length *///环形缓冲赋值队列已用大小（影响是否能部分复制）
+    // 实际上谈不上空闲，因为总是环绕覆盖写，
+    // 理解为最新数据的截止位置更为合适，更新的数据总是从这里开始写入到repl_backlog中。
     long long repl_backlog_idx;     /* Backlog circular buffer current offset,
-                                       that is the next byte will'll write to.*/
+                                       that is the next byte will'll write to.*/// 环形缓冲复制队列空闲起始位置（写从这里开始）
     long long repl_backlog_off;     /* Replication "master offset" of first
-                                       byte in the replication backlog buffer.*/
+                                       byte in the replication backlog buffer.*/// 数据在环形缓冲复制队列的起始位置（读从这里开始）
     time_t repl_backlog_time_limit; /* Time without slaves after the backlog
-                                       gets released. */
+                                       gets released. */// 环形缓冲复制队列生存时长
     time_t repl_no_slaves_since;    /* We have no slaves since that time.
-                                       Only valid if server.slaves len is 0. */
-    int repl_min_slaves_to_write;   /* Min number of slaves to write. */
+                                       Only valid if server.slaves len is 0. */// 无可用从节点的发生时间
+    int repl_min_slaves_to_write;   /* Min number of slaves to write. */ // 最小需写的从节点数
     int repl_min_slaves_max_lag;    /* Max lag of <count> slaves to write. */
     int repl_good_slaves_count;     /* Number of slaves with lag <= max_lag. */
-    int repl_diskless_sync;         /* Master send RDB to slaves sockets directly. */
+    int repl_diskless_sync;         /* Master send RDB to slaves sockets directly. */// 不落磁盘（无盘）往从节点发送RDB（全量复制）
     int repl_diskless_load;         /* Slave parse RDB directly from the socket.
                                      * see REPL_DISKLESS_LOAD_* enum */
-    int repl_diskless_sync_delay;   /* Delay to start a diskless repl BGSAVE. */
+    int repl_diskless_sync_delay;   /* Delay to start a diskless repl BGSAVE. */// 无盘复制时，延迟指定的时长，以等待更多的从节点
     /* Replication (slave) */
     char *masteruser;               /* AUTH with this user and masterauth with master */
     char *masterauth;               /* AUTH with this password with master */
@@ -1334,7 +1336,10 @@ struct redisServer {
     int get_ack_from_slaves;            /* If true we send REPLCONF GETACK. */
     /* Limits */
     unsigned int maxclients;            /* Max number of simultaneous clients */
-    unsigned long long maxmemory;   /* Max number of memory bytes to use */
+    /*
+    maxmemory选项对redis所能够使用的最大内存做限制，并通过maxmemory_policy对redis占用内存超过maxmemory之后的行为做定制。
+    */
+    unsigned long long maxmemory;   /* Max number of memory bytes to use *///最大可被使用的空间
     int maxmemory_policy;           /* Policy for key eviction */
     int maxmemory_samples;          /* Pricision of random sampling */
     int lfu_log_factor;             /* LFU logarithmic counter factor. */
@@ -1502,10 +1507,10 @@ typedef struct _redisSortOperation {
 /* Structure to hold list iteration abstraction. */
 typedef struct {
     robj *subject;
-    unsigned char encoding;
-    unsigned char direction; /* Iteration direction */
-    quicklistIter *iter;
-} listTypeIterator;
+    unsigned char encoding;//subject中对象的压缩方式
+    unsigned char direction; /* Iteration direction *///迭代方向
+    quicklistIter *iter;//指向当前quicklist迭代位置元素的迭代器
+} listTypeIterator;//robj使用的quicklist迭代器
 
 /* Structure for an entry while iterating over a list. */
 typedef struct {
@@ -1719,16 +1724,27 @@ void trackingBroadcastInvalidationMessages(void);
 
 /* List data type */
 void listTypeTryConversion(robj *subject, robj *value);
+//在subject的quicklist中按照where插入value
 void listTypePush(robj *subject, robj *value, int where);
+//将subject指向的quicklist中的一个元素按照where从头或者尾部去除，并创建robj存储这个值
 robj *listTypePop(robj *subject, int where);
+//获取这个subject中quicklist的元素个数 quicklist->count
 unsigned long listTypeLength(const robj *subject);
+//获取subject指向的quicklist中index位置direction方向的的迭代器
 listTypeIterator *listTypeInitIterator(robj *subject, long index, unsigned char direction);
+//释放robj指向quicklist的迭代器
 void listTypeReleaseIterator(listTypeIterator *li);
+//根据li迭代器中的信息，获取li指向的quicklist的下一个元素，并将这个元素的数据存在entry中。返回0表示没有，返回1便是数据存在
 int listTypeNext(listTypeIterator *li, listTypeEntry *entry);
+//将entry中的元素转化为robj
 robj *listTypeGet(listTypeEntry *entry);
+//将value插入到entry指向的quicklist的头或者尾
 void listTypeInsert(listTypeEntry *entry, robj *value, int where);
+//判断entry指向的quicklist中的元素是不是和robj中的元素相同
 int listTypeEqual(listTypeEntry *entry, robj *o);
+//删除entry指向的quicklist存在entry->zi位置的元素，并更新iter的zi和node等信息，防止野指针和node不同步 
 void listTypeDelete(listTypeIterator *iter, listTypeEntry *entry);
+//将subject中的ziplist转化为quicklist，enc为压缩类型
 void listTypeConvert(robj *subject, int enc);
 void unblockClientWaitingData(client *c);
 void popGenericCommand(client *c, int where);
@@ -2255,8 +2271,8 @@ void shutdownCommand(client *c);
 void moveCommand(client *c);
 void renameCommand(client *c);
 void renamenxCommand(client *c);
-void lpushCommand(client *c);
-void rpushCommand(client *c);
+void lpushCommand(client *c);//lpush key value [value...]
+void rpushCommand(client *c);//rpush key value [value...]
 void lpushxCommand(client *c);
 void rpushxCommand(client *c);
 void linsertCommand(client *c);

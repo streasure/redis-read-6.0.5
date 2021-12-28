@@ -33,9 +33,10 @@
 /*-----------------------------------------------------------------------------
  * String Commands
  *----------------------------------------------------------------------------*/
-
+//判断传过来的字符串长度是否超过最大上限
 static int checkStringLength(client *c, long long size) {
     if (size > 512*1024*1024) {
+        //回包
         addReplyError(c,"string exceeds maximum allowed size (512MB)");
         return C_ERR;
     }

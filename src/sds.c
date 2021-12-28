@@ -505,7 +505,11 @@ sds sdscpy(sds s, const char *t) {
  *
  * The function returns the length of the null-terminated string
  * representation stored at 's'. */
-#define SDS_LLSTR_SIZE 21
+#define SDS_LLSTR_SIZE 21 //longlong最大数2……64
+/*
+将sds longlong类型的数据转化为string存放在s中
+详细过程就是将这个值不停对十取余转化为ascii码，反向存储，数据全部转化完了以后将字符串反转，负数会在最后加上负号
+*/
 int sdsll2str(char *s, long long value) {
     char *p, aux;
     unsigned long long v;
@@ -525,6 +529,7 @@ int sdsll2str(char *s, long long value) {
     if (value < 0) *p++ = '-';
 
     /* Compute length and add null term. */
+    //代表字符串长度
     l = p-s;
     *p = '\0';
 

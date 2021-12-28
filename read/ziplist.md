@@ -27,3 +27,21 @@ ZIPLIST_TAIL_OFFSET(zl)//重点在ziplistpush的时候
 如果插入的位置为尾节点则会将尾节点到头结点的距离赋值给zltail
 如果头节点位置开始插入会将新申请的reqlen+原来的zltail赋值给最新的zltail
 所以这个函数获取到的就是最后一个entry所在的头部数据指针
+
+
+redis.conf配置
+如果保持ziplist的合理长度，取决于具体的应用场景。redis提供了默认配置
+list-max-ziplist-size -2
+参数的含义解释，取正值时表示quicklist节点ziplist包含的数据项。取负值表示按照占用字节来限定quicklist节点ziplist的长度。
+-5: 每个quicklist节点上的ziplist大小不能超过64 Kb。
+-4: 每个quicklist节点上的ziplist大小不能超过32 Kb。
+-3: 每个quicklist节点上的ziplist大小不能超过16 Kb。
+-2: 每个quicklist节点上的ziplist大小不能超过8 Kb。（默认值）
+-1: 每个quicklist节点上的ziplist大小不能超过4 Kb。
+
+list设计最容易被访问的是列表两端的数据，中间的访问频率很低，如果符合这个场景，list还有一个配置，可以对中间节点进行压缩（采用的LZF——一种无损压缩算法），进一步节省内存。配置如下
+list-compress-depth 0 
+含义：
+0: 是个特殊值，表示都不压缩。这是Redis的默认值。
+1: 表示quicklist两端各有1个节点不压缩，中间的节点压缩。
+2: 表示quicklist两端各有2个节点不压缩，中间的节点压缩。

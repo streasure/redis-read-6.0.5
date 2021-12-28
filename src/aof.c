@@ -581,21 +581,32 @@ sds catAppendOnlyExpireAtCommand(sds buf, struct redisCommand *cmd, robj *key, r
     return buf;
 }
 
+//将redis操作写入aof缓存追加
+/*
+args:
+struct redisCommand *cmd  //增删查改操作
+int dictid                //数据库编号
+robj **argv               //参数数组
+int argc                  //参数个数
+*/
 void feedAppendOnlyFile(struct redisCommand *cmd, int dictid, robj **argv, int argc) {
+    //创建一个sds
     sds buf = sdsempty();
     robj *tmpargv[3];
 
     /* The DB this command was targeting is not the same as the last command
      * we appended. To issue a SELECT command is needed. */
-    if (dictid != server.aof_selected_db) {
+    if (dictid != server.aof_selected_db) {//如果不是aof所在的数据库
         char seldb[64];
-
+        //将db库转为字符串seldb
         snprintf(seldb,sizeof(seldb),"%d",dictid);
+        //生成aof标准格式，选择新的数据库 select dictid
         buf = sdscatprintf(buf,"*2\r\n$6\r\nSELECT\r\n$%lu\r\n%s\r\n",
             (unsigned long)strlen(seldb),seldb);
+        //将数据库指向为传进来的id
         server.aof_selected_db = dictid;
     }
-
+    //判断cmd
     if (cmd->proc == expireCommand || cmd->proc == pexpireCommand ||
         cmd->proc == expireatCommand) {
         /* Translate EXPIRE/PEXPIRE/EXPIREAT into PEXPIREAT */

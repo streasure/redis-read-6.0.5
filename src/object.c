@@ -37,7 +37,7 @@
 #endif
 
 /* ===================== Creation and parsing of objects ==================== */
-
+//根据type创建obj，obj的encoding都为未压缩状态
 robj *createObject(int type, void *ptr) {
     robj *o = zmalloc(sizeof(*o));
     o->type = type;
@@ -66,7 +66,9 @@ robj *createObject(int type, void *ptr) {
  * robj *myobject = makeObjectShared(createObject(...));
  *
  */
+//标志这个obj为已分享
 robj *makeObjectShared(robj *o) {
+    //必须是没有被引用的状态
     serverAssert(o->refcount == 1);
     o->refcount = OBJ_SHARED_REFCOUNT;
     return o;
@@ -74,6 +76,7 @@ robj *makeObjectShared(robj *o) {
 
 /* Create a string object with encoding OBJ_ENCODING_RAW, that is a plain
  * string object where o->ptr points to a proper sds string. */
+//创建一个type为string的encoding为未压缩状态的obj
 robj *createRawStringObject(const char *ptr, size_t len) {
     return createObject(OBJ_STRING, sdsnewlen(ptr,len));
 }
@@ -81,6 +84,7 @@ robj *createRawStringObject(const char *ptr, size_t len) {
 /* Create a string object with encoding OBJ_ENCODING_EMBSTR, that is
  * an object where the sds string is actually an unmodifiable string
  * allocated in the same chunk as the object itself. */
+//创建一个type为string，encoding为sds的obj
 robj *createEmbeddedStringObject(const char *ptr, size_t len) {
     robj *o = zmalloc(sizeof(robj)+sizeof(struct sdshdr8)+len+1);
     //指针地址偏移就是sdshdr8
@@ -118,6 +122,7 @@ robj *createEmbeddedStringObject(const char *ptr, size_t len) {
  * The current limit of 44 is chosen so that the biggest string object
  * we allocate as EMBSTR will still fit into the 64 byte arena of jemalloc. */
 #define OBJ_ENCODING_EMBSTR_SIZE_LIMIT 44//为了适配jemalloc的64位
+//创建一个值为ptr的type为string的robj
 robj *createStringObject(const char *ptr, size_t len) {
     if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT)
         return createEmbeddedStringObject(ptr,len);
@@ -132,26 +137,38 @@ robj *createStringObject(const char *ptr, size_t len) {
  * integer, because the object is going to be used as value in the Redis key
  * space (for instance when the INCR command is used), so we want LFU/LRU
  * values specific for each key. */
+//创建一个值为value的obj，encoding为OBJ_ENCODING_INT
+/*
+value代表存在robj->ptr
+valueobj代表是不是需要创建一个新的对象，只有在全局共享对象中有这个时才不会创建新对象，不然都会返回新的robj
+*/
 robj *createStringObjectFromLongLongWithOptions(long long value, int valueobj) {
     robj *o;
-
+    //查看是否超过最大内存上限,或者根据maxmemory_policy确定是否释放内存和如何释放内存
     if (server.maxmemory == 0 ||
-        !(server.maxmemory_policy & MAXMEMORY_FLAG_NO_SHARED_INTEGERS))
+        !(server.maxmemory_policy & MAXMEMORY_FLAG_NO_SHARED_INTEGERS))//看判断条件貌似redis.conf没有设置这两个默认全部是共享对象
     {
-        /* If the maxmemory policy permits, we can still return shared integers
+        /* If the maxmemory_policy permits, we can still return shared integers
          * even if valueobj is true. */
+        //如果maxmemory_policy允许，在valueobj为true的情况下我们也可以返回一个共享对象
         valueobj = 0;
     }
-
+    //查看value是不是在全局共享变量中
     if (value >= 0 && value < OBJ_SHARED_INTEGERS && valueobj == 0) {
+        //增加引用计数，感觉这个函数可以不调用
         incrRefCount(shared.integers[value]);
+        //返回共享对象的robj
         o = shared.integers[value];
     } else {
+        //如果这个value在long的取值范围内
         if (value >= LONG_MIN && value <= LONG_MAX) {
+            //创建type为string的robj
             o = createObject(OBJ_STRING, NULL);
+            //压缩方式为数字
             o->encoding = OBJ_ENCODING_INT;
+            //赋值
             o->ptr = (void*)((long)value);
-        } else {
+        } else {//超出了long的表示范围，超大数
             o = createObject(OBJ_STRING,sdsfromlonglong(value));
         }
     }
@@ -160,6 +177,9 @@ robj *createStringObjectFromLongLongWithOptions(long long value, int valueobj) {
 
 /* Wrapper for createStringObjectFromLongLongWithOptions() always demanding
  * to create a shared object if possible. */
+//包装createStringObjectFromLongLongWithOptions用于尽量创建共享对象
+//用value创建一个encoding为OBJ_ENCODING_INT或者OBJ_ENCODING_RAW的robj
+//在数据在long表示范围内encoding用OBJ_ENCODING_INT，超出的都用OBJ_ENCODING_RAW
 robj *createStringObjectFromLongLong(long long value) {
     return createStringObjectFromLongLongWithOptions(value,0);
 }
@@ -348,11 +368,12 @@ void freeStreamObject(robj *o) {
     freeStream(o->ptr);
 }
 
+//更新这个对象的引用计数
 void incrRefCount(robj *o) {
     if (o->refcount < OBJ_FIRST_SPECIAL_REFCOUNT) {
         o->refcount++;
     } else {
-        if (o->refcount == OBJ_SHARED_REFCOUNT) {
+        if (o->refcount == OBJ_SHARED_REFCOUNT) {//本身就是共享变量无需修改引用计数，全局变量
             /* Nothing to do: this refcount is immutable. */
         } else if (o->refcount == OBJ_STATIC_REFCOUNT) {
             serverPanic("You tried to retain an object allocated in the stack");
@@ -360,8 +381,9 @@ void incrRefCount(robj *o) {
     }
 }
 
+//减少obj的引用计数
 void decrRefCount(robj *o) {
-    if (o->refcount == 1) {
+    if (o->refcount == 1) {//如果只有一个引用则需要将这个obj释放
         switch(o->type) {
         case OBJ_STRING: freeStringObject(o); break;
         case OBJ_LIST: freeListObject(o); break;
@@ -519,17 +541,21 @@ robj *tryObjectEncoding(robj *o) {
 
 /* Get a decoded version of an encoded object (returned as a new object).
  * If the object is already raw-encoded just increment the ref count. */
+//将obj中的数据转化为string返回，返回值的type都为string
 robj *getDecodedObject(robj *o) {
     robj *dec;
-
+    //如果是sds的encoding或者没有压缩过的代码
     if (sdsEncodedObject(o)) {
+        //更新引用计数
         incrRefCount(o);
         return o;
     }
+    //将数字转化为字符串
     if (o->type == OBJ_STRING && o->encoding == OBJ_ENCODING_INT) {
         char buf[32];
-
+        //将数字转化为string
         ll2string(buf,32,(long)o->ptr);
+        //创建新的sds类型的obj
         dec = createStringObject(buf,strlen(buf));
         return dec;
     } else {

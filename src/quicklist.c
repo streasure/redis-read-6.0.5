@@ -661,6 +661,7 @@ quicklist *quicklistAppendValuesFromZiplist(quicklist *quicklist,
 /* Create new (potentially multi-node) quicklist from a single existing ziplist.
  *
  * Returns new quicklist.  Frees passed-in ziplist 'zl'. */
+//用zl代表的ziplist创建一个初始化了fill和compress的quicklist
 quicklist *quicklistCreateFromZiplist(int fill, int compress,
                                       unsigned char *zl) {
     return quicklistAppendValuesFromZiplist(quicklistNew(fill, compress), zl);
@@ -751,8 +752,8 @@ REDIS_STATIC int quicklistDelIndex(quicklist *quicklist, quicklistNode *node,
 /*
 删除entry所在的quicklist中node的ziplist中zi位置的元素
 如果这个node被删除了，需要根据iter的direction更新这个iter指向的node和offset
+iter的zi必须置为空，因为指向的是老的ziplist的指针，ziplist在数据做修改会重新申请空间，原来的zi是个野指针
 */
-
 void quicklistDelEntry(quicklistIter *iter, quicklistEntry *entry) {
     //节点的前置和后置节点
     quicklistNode *prev = entry->node->prev;
@@ -762,7 +763,7 @@ void quicklistDelEntry(quicklistIter *iter, quicklistEntry *entry) {
                                          entry->node, &entry->zi);
 
     /* after delete, the zi is now invalid for any future usage. */
-    //node已经删除了代表迭代器中的zi已经不可获取了
+    //node已经删除了代表迭代器中的zi已经不可获取了，原因时ziplist的内存已经变了，老地址不可达
     iter->zi = NULL;
 
     /* If current node is deleted, we must update iterator node and offset. */
@@ -1339,7 +1340,19 @@ void quicklistReleaseIterator(quicklistIter *iter) {
  * If return value is 0, the contents of 'entry' are not valid.
  */
 
-//获取iter这个迭代器所在quicklist的node根据direction的zi的下一个元素
+//获取iter这个迭代器所在quicklist的node根据direction的zi的下一个元素，并将元素的数据首地址指向和offset存在entry中
+/*
+typedef struct quicklistEntry {//返回的entry中存的数据
+    const quicklist *quicklist;//quicklist本身
+    quicklistNode *node;//正在操作的node
+    unsigned char *zi;//node中zl正在操作的entry位置
+    //下面三个存zi位置指向的元素数据本身
+    unsigned char *value;
+    long long longval;
+    unsigned int sz;
+    int offset;//向前或者向后的偏移量
+} quicklistEntry;
+*/
 int quicklistNext(quicklistIter *iter, quicklistEntry *entry) {
     initEntry(entry);
 
@@ -1672,6 +1685,7 @@ int quicklistPop(quicklist *quicklist, int where, unsigned char **data,
 }
 
 /* Wrapper to allow argument-based switching between HEAD/TAIL pop */
+//quicklist数据插入，根据where决定调用quicklistPushHead还是quicklistPushTail
 void quicklistPush(quicklist *quicklist, void *value, const size_t sz,
                    int where) {
     if (where == QUICKLIST_HEAD) {

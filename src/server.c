@@ -58,7 +58,7 @@
 
 /* Our shared "common" objects */
 
-struct sharedObjectsStruct shared;
+struct sharedObjectsStruct shared;//全局的共享变量存储位置
 
 /* Global vars that are actually used as constants. The following double
  * values are used for double on-disk serialization, and are initialized
@@ -1469,6 +1469,7 @@ void updateDictResizePolicy(void) {
 
 /* Return true if there are no active children processes doing RDB saving,
  * AOF rewriting, or some side process spawned by a loaded module. */
+//判断redis是否有后台运行的保存rdb或者aof或者加载模块生成的进程，都为-1代表没有这些进程
 int hasActiveChildProcess() {
     return server.rdb_child_pid != -1 ||
            server.aof_child_pid != -1 ||
@@ -2206,7 +2207,7 @@ void afterSleep(struct aeEventLoop *eventLoop) {
 }
 
 /* =========================== Server initialization ======================== */
-
+//初始化所有的共享变量
 void createSharedObjects(void) {
     int j;
 
@@ -2774,7 +2775,7 @@ void initServer(void) {
         serverLog(LL_WARNING, "Failed to configure TLS. Check logs for more info.");
         exit(1);
     }
-
+    //初始化共享变量
     createSharedObjects();
     adjustOpenFilesLimit();
     server.el = aeCreateEventLoop(server.maxclients+CONFIG_FDSET_INCR);
@@ -4963,7 +4964,7 @@ int iAmMaster(void) {
             (server.cluster_enabled && nodeIsMaster(server.cluster->myself)));
 }
 
-
+//redis启动函数
 int main(int argc, char **argv) {
     struct timeval tv;
     int j;
@@ -5122,7 +5123,7 @@ int main(int argc, char **argv) {
     server.supervised = redisIsSupervised(server.supervised_mode);
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
-
+    //服务初始化
     initServer();
     if (background || server.pidfile) createPidFile();
     redisSetProcTitle(argv[0]);

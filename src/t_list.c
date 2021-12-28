@@ -38,34 +38,42 @@
  *
  * There is no need for the caller to increment the refcount of 'value' as
  * the function takes care of it if needed. */
+//在subject的quicklist中按照where插入value
 void listTypePush(robj *subject, robj *value, int where) {
     //只适用与quicklist
     if (subject->encoding == OBJ_ENCODING_QUICKLIST) {
         //判断位置是头还是尾
         int pos = (where == LIST_HEAD) ? QUICKLIST_HEAD : QUICKLIST_TAIL;
+        //增加引用计数，将int转化为string等操作
         value = getDecodedObject(value);
         //获取value的len
         size_t len = sdslen(value->ptr);
+        //根据pos插入到quicklist的头或者尾
         quicklistPush(subject->ptr, value->ptr, len, pos);
+        //减少引用计数
         decrRefCount(value);
     } else {
         serverPanic("Unknown list encoding");
     }
 }
 
+//获取一个值为data的robj
 void *listPopSaver(unsigned char *data, unsigned int sz) {
     return createStringObject((char*)data,sz);
 }
 
+//将subject指向的quicklist中的一个元素按照where从头或者尾部去除，并创建robj存储这个值
 robj *listTypePop(robj *subject, int where) {
     long long vlong;
     robj *value = NULL;
-
+    //判断实在quicklist的head还是tail
     int ql_where = where == LIST_HEAD ? QUICKLIST_HEAD : QUICKLIST_TAIL;
+    //对象必须是quicklist
     if (subject->encoding == OBJ_ENCODING_QUICKLIST) {
+        //从quicklist中pop出一个元素
         if (quicklistPopCustom(subject->ptr, ql_where, (unsigned char **)&value,
                                NULL, &vlong, listPopSaver)) {
-            if (!value)
+            if (!value)//如果数据不在value中就是存在vlong，创建新的robj
                 value = createStringObjectFromLongLong(vlong);
         }
     } else {
@@ -74,6 +82,7 @@ robj *listTypePop(robj *subject, int where) {
     return value;
 }
 
+//获取这个subject中quicklist的元素个数 quicklist->count
 unsigned long listTypeLength(const robj *subject) {
     if (subject->encoding == OBJ_ENCODING_QUICKLIST) {
         return quicklistCount(subject->ptr);
@@ -83,18 +92,24 @@ unsigned long listTypeLength(const robj *subject) {
 }
 
 /* Initialize an iterator at the specified index. */
+//获取subject指向的quicklist中index位置direction方向的的迭代器
 listTypeIterator *listTypeInitIterator(robj *subject, long index,
                                        unsigned char direction) {
+    //初始化返回值
     listTypeIterator *li = zmalloc(sizeof(listTypeIterator));
+    //初始化迭代器的变量
     li->subject = subject;
     li->encoding = subject->encoding;
     li->direction = direction;
     li->iter = NULL;
     /* LIST_HEAD means start at TAIL and move *towards* head.
      * LIST_TAIL means start at HEAD and move *towards tail. */
+    //获取迭代方向为头开始还是尾开始
     int iter_direction =
         direction == LIST_HEAD ? AL_START_TAIL : AL_START_HEAD;
+    //只支持quicklist
     if (li->encoding == OBJ_ENCODING_QUICKLIST) {
+        //初始化这个quicklist在这个index下的iter
         li->iter = quicklistGetIteratorAtIdx(li->subject->ptr,
                                              iter_direction, index);
     } else {
@@ -104,6 +119,7 @@ listTypeIterator *listTypeInitIterator(robj *subject, long index,
 }
 
 /* Clean up the iterator. */
+//释放robj指向quicklist的迭代器
 void listTypeReleaseIterator(listTypeIterator *li) {
     zfree(li->iter);
     zfree(li);
@@ -112,12 +128,16 @@ void listTypeReleaseIterator(listTypeIterator *li) {
 /* Stores pointer to current the entry in the provided entry structure
  * and advances the position of the iterator. Returns 1 when the current
  * entry is in fact an entry, 0 otherwise. */
+//根据li迭代器中的信息，获取li指向的quicklist的下一个元素，并将这个元素的数据存在entry中，返回0表示没有，返回1便是数据存在
 int listTypeNext(listTypeIterator *li, listTypeEntry *entry) {
     /* Protect from converting when iterating */
+    //如果两个encoding不一样，后期看一下哪里做修改
+    //TODO 增加修改位置的解释
     serverAssert(li->subject->encoding == li->encoding);
-
+    //设置entry迭代器
     entry->li = li;
     if (li->encoding == OBJ_ENCODING_QUICKLIST) {
+        //迭代下一个元素，数据放在entry中
         return quicklistNext(li->iter, &entry->entry);
     } else {
         serverPanic("Unknown list encoding");
@@ -126,13 +146,17 @@ int listTypeNext(listTypeIterator *li, listTypeEntry *entry) {
 }
 
 /* Return entry or NULL at the current position of the iterator. */
+//将entry中的元素转化为robj
 robj *listTypeGet(listTypeEntry *entry) {
+    //构建新的robj
     robj *value = NULL;
+    //只对quicklist做处理
     if (entry->li->encoding == OBJ_ENCODING_QUICKLIST) {
-        if (entry->entry.value) {
+        //根据entry存的值做处理
+        if (entry->entry.value) {//字符串放在value中
             value = createStringObject((char *)entry->entry.value,
                                        entry->entry.sz);
-        } else {
+        } else {//数字放在longval
             value = createStringObjectFromLongLong(entry->entry.longval);
         }
     } else {
@@ -141,18 +165,21 @@ robj *listTypeGet(listTypeEntry *entry) {
     return value;
 }
 
+//将value插入到entry指向的quicklist的头或者尾
 void listTypeInsert(listTypeEntry *entry, robj *value, int where) {
     if (entry->li->encoding == OBJ_ENCODING_QUICKLIST) {
+        //获取纯string的robj
         value = getDecodedObject(value);
         sds str = value->ptr;
         size_t len = sdslen(str);
-        if (where == LIST_TAIL) {
+        if (where == LIST_TAIL) {//判断时头还是尾
             quicklistInsertAfter((quicklist *)entry->entry.quicklist,
                                  &entry->entry, str, len);
         } else if (where == LIST_HEAD) {
             quicklistInsertBefore((quicklist *)entry->entry.quicklist,
                                   &entry->entry, str, len);
         }
+        //减少引用
         decrRefCount(value);
     } else {
         serverPanic("Unknown list encoding");
@@ -160,6 +187,7 @@ void listTypeInsert(listTypeEntry *entry, robj *value, int where) {
 }
 
 /* Compare the given object with the entry at the current position. */
+//判断entry指向的quicklist中的元素是不是和robj中的元素相同
 int listTypeEqual(listTypeEntry *entry, robj *o) {
     if (entry->li->encoding == OBJ_ENCODING_QUICKLIST) {
         serverAssertWithInfo(NULL,o,sdsEncodedObject(o));
@@ -170,8 +198,10 @@ int listTypeEqual(listTypeEntry *entry, robj *o) {
 }
 
 /* Delete the element pointed to. */
+//删除entry指向的quicklist存在entry->zi位置的元素，并更新iter的zi和node等信息，防止野指针和node不同步 
 void listTypeDelete(listTypeIterator *iter, listTypeEntry *entry) {
     if (entry->li->encoding == OBJ_ENCODING_QUICKLIST) {
+        //删除entry指向的元素并更新iter中有关这个quicklist的信息
         quicklistDelEntry(iter->iter, &entry->entry);
     } else {
         serverPanic("Unknown list encoding");
@@ -179,14 +209,20 @@ void listTypeDelete(listTypeIterator *iter, listTypeEntry *entry) {
 }
 
 /* Create a quicklist from a single ziplist */
+//将subject中的ziplist转化为quicklist，enc为压缩类型，只对quicklist有作用
 void listTypeConvert(robj *subject, int enc) {
+    //校验subject的数据类型是不是符合转换条件
     serverAssertWithInfo(NULL,subject,subject->type==OBJ_LIST);
     serverAssertWithInfo(NULL,subject,subject->encoding==OBJ_ENCODING_ZIPLIST);
-
+    //值转换为quicklist
     if (enc == OBJ_ENCODING_QUICKLIST) {
+        //获取配置的相关信息，查看ziplist的最大长度
         size_t zlen = server.list_max_ziplist_size;
+        //看压缩的深度
         int depth = server.list_compress_depth;
+        //创建quicklist
         subject->ptr = quicklistCreateFromZiplist(zlen, depth, subject->ptr);
+        //设置压缩方式
         subject->encoding = OBJ_ENCODING_QUICKLIST;
     } else {
         serverPanic("Unsupported list conversion");
@@ -194,13 +230,14 @@ void listTypeConvert(robj *subject, int enc) {
 }
 
 /*-----------------------------------------------------------------------------
- * List Commands
+ * List Commands  操作代码
  *----------------------------------------------------------------------------*/
-
+//这个操作如果key不存在会被创建
 void pushGenericCommand(client *c, int where) {
     int j, pushed = 0;
+    //在db中查找key
     robj *lobj = lookupKeyWrite(c->db,c->argv[1]);
-
+    //判断数据类型是不是正确的list
     if (lobj && lobj->type != OBJ_LIST) {
         addReply(c,shared.wrongtypeerr);
         return;
@@ -226,14 +263,16 @@ void pushGenericCommand(client *c, int where) {
     server.dirty += pushed;
 }
 
+//lpush 头部插入quicklist元素 lpush key value [value...]
 void lpushCommand(client *c) {
     pushGenericCommand(c,LIST_HEAD);
 }
 
+//rpush 尾部插入quicklist元素 rpush key value [value...]
 void rpushCommand(client *c) {
     pushGenericCommand(c,LIST_TAIL);
 }
-
+//这个操作只在已存在的list的做处理，key不存在直接返回
 void pushxGenericCommand(client *c, int where) {
     int j, pushed = 0;
     robj *subject;

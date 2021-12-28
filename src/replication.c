@@ -148,6 +148,7 @@ void resizeReplicationBacklog(long long newsize) {
     }
 }
 
+//释放服务端的backlog
 void freeReplicationBacklog(void) {
     serverAssert(listLength(server.slaves) == 0);
     zfree(server.repl_backlog);
@@ -158,14 +159,16 @@ void freeReplicationBacklog(void) {
  * This function also increments the global replication offset stored at
  * server.master_repl_offset, because there is no case where we want to feed
  * the backlog without incrementing the offset. */
+//将数据加入环形缓存backlog
 void feedReplicationBacklog(void *ptr, size_t len) {
     unsigned char *p = ptr;
-
+    //更新主节点缓存偏移
     server.master_repl_offset += len;
 
     /* This is a circular buffer, so write as much data we can at every
      * iteration and rewind the "idx" index if we reach the limit. */
     while(len) {
+        //获取还剩多少剩余位置
         size_t thislen = server.repl_backlog_size - server.repl_backlog_idx;
         if (thislen > len) thislen = len;
         memcpy(server.repl_backlog+server.repl_backlog_idx,p,thislen);
@@ -189,7 +192,7 @@ void feedReplicationBacklogWithObject(robj *o) {
     char llstr[LONG_STR_SIZE];
     void *p;
     size_t len;
-
+    //根据编码获取数据和数据长度，整形长度为转化为十进制string后的长度
     if (o->encoding == OBJ_ENCODING_INT) {
         len = ll2string(llstr,sizeof(llstr),(long)o->ptr);
         p = llstr;
@@ -205,10 +208,12 @@ void feedReplicationBacklogWithObject(robj *o) {
  * the commands received by our clients in order to create the replication
  * stream. Instead if the instance is a slave and has sub-slaves attached,
  * we use replicationFeedSlavesFromMaster() */
+//从库同步主库的数据
 void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
     listNode *ln;
     listIter li;
     int j, len;
+    //长整型最大位数21位 longlong
     char llstr[LONG_STR_SIZE];
 
     /* If the instance is not a top level master, return ASAP: we'll just proxy
@@ -216,25 +221,30 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
      * propagate *identical* replication stream. In this way this slave can
      * advertise the same replication ID as the master (since it shares the
      * master replication history and has the same backlog and offsets). */
+    //如果是从库直接返回
     if (server.masterhost != NULL) return;
 
     /* If there aren't slaves, and there is no backlog buffer to populate,
      * we can return ASAP. */
+    //没有从库和backlog
     if (server.repl_backlog == NULL && listLength(slaves) == 0) return;
 
     /* We can't have slaves attached and no backlog. */
+    //不能接受有从库但是没有backlog
     serverAssert(!(listLength(slaves) != 0 && server.repl_backlog == NULL));
 
     /* Send SELECT command to every slave if needed. */
+    //判断分库的db是否为正确的db
     if (server.slaveseldb != dictid) {
         robj *selectcmd;
 
         /* For a few DBs we have pre-computed SELECT command. */
+        //有一部分指令为全局共享对象
         if (dictid >= 0 && dictid < PROTO_SHARED_SELECT_CMDS) {
             selectcmd = shared.select[dictid];
         } else {
             int dictid_len;
-
+            //生成新的select db
             dictid_len = ll2string(llstr,sizeof(llstr),dictid);
             selectcmd = createObject(OBJ_STRING,
                 sdscatprintf(sdsempty(),
@@ -243,6 +253,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
         }
 
         /* Add the SELECT command into the backlog. */
+        //将指令加入到backlog
         if (server.repl_backlog) feedReplicationBacklogWithObject(selectcmd);
 
         /* Send it to slaves. */
@@ -252,7 +263,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
             if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) continue;
             addReply(slave,selectcmd);
         }
-
+        //如果是新建的robj引用结束，计数--
         if (dictid < 0 || dictid >= PROTO_SHARED_SELECT_CMDS)
             decrRefCount(selectcmd);
     }
