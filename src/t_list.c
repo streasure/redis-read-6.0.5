@@ -232,32 +232,37 @@ void listTypeConvert(robj *subject, int enc) {
 /*-----------------------------------------------------------------------------
  * List Commands  操作代码
  *----------------------------------------------------------------------------*/
-//这个操作如果key不存在会被创建
+//这个操作如果key不存在会被创建 lpush/rpush
+//LPUSH languages python
 void pushGenericCommand(client *c, int where) {
     int j, pushed = 0;
-    //在db中查找key
+    //在db中查找key，没有或者过期会返回null
     robj *lobj = lookupKeyWrite(c->db,c->argv[1]);
     //判断数据类型是不是正确的list
     if (lobj && lobj->type != OBJ_LIST) {
         addReply(c,shared.wrongtypeerr);
         return;
     }
-
+    //LPUSH languages python
     for (j = 2; j < c->argc; j++) {
-        if (!lobj) {
+        if (!lobj) {//如果没有这个key
             lobj = createQuicklistObject();
             quicklistSetOptions(lobj->ptr, server.list_max_ziplist_size,
                                 server.list_compress_depth);
+            //添加key
             dbAdd(c->db,c->argv[1],lobj);
         }
+        //插入元素，在这边减少lobj的引用计数
         listTypePush(lobj,c->argv[j],where);
         pushed++;
     }
+    //返回新的quicklist的数据长度
     addReplyLongLong(c, (lobj ? listTypeLength(lobj) : 0));
-    if (pushed) {
+    if (pushed) {//如果正确插入了
         char *event = (where == LIST_HEAD) ? "lpush" : "rpush";
-
+        //通知clients这个key有变动
         signalModifiedKey(c,c->db,c->argv[1]);
+        //推送key的操作
         notifyKeyspaceEvent(NOTIFY_LIST,event,c->argv[1],c->db->id);
     }
     server.dirty += pushed;
@@ -276,10 +281,10 @@ void rpushCommand(client *c) {
 void pushxGenericCommand(client *c, int where) {
     int j, pushed = 0;
     robj *subject;
-
+    //判断是否有这个key或者key的类型不为quicklist
     if ((subject = lookupKeyWriteOrReply(c,c->argv[1],shared.czero)) == NULL ||
         checkType(c,subject,OBJ_LIST)) return;
-
+    //插入元素
     for (j = 2; j < c->argc; j++) {
         listTypePush(subject,c->argv[j],where);
         pushed++;
@@ -295,21 +300,29 @@ void pushxGenericCommand(client *c, int where) {
     server.dirty += pushed;
 }
 
+//尝试插入，key不存在不做操作 LPUSHX greet "hello"
 void lpushxCommand(client *c) {
     pushxGenericCommand(c,LIST_HEAD);
 }
-
+//尝试插入，key不存在不做操作 RPUSHX greet "hello"
 void rpushxCommand(client *c) {
     pushxGenericCommand(c,LIST_TAIL);
 }
 
+//LINSERT key BEFORE|AFTER pivot value
+/*
+将值 value 插入到列表 key 当中，位于值 pivot 之前或之后。
+当 pivot 不存在于列表 key 时，不执行任何操作。
+当 key 不存在时， key 被视为空列表，不执行任何操作。
+如果 key 不是列表类型，返回一个错误。
+*/
 void linsertCommand(client *c) {
     int where;
     robj *subject;
     listTypeIterator *iter;
     listTypeEntry entry;
     int inserted = 0;
-
+    //判断是在前插还是后插
     if (strcasecmp(c->argv[2]->ptr,"after") == 0) {
         where = LIST_TAIL;
     } else if (strcasecmp(c->argv[2]->ptr,"before") == 0) {

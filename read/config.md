@@ -40,3 +40,18 @@ Redis 4.0 同样给这两个指令也带来了异步化，在指令后面增加a
 # slave_repl_offset
 同样也是一个偏移量，从节点收到主节点发送的命令后，累加自身的偏移量，通过比较主从节点的复制偏移量可以判断主从节点数据是否一致。
 当从实例连接到主实例时，从实例会发送master_replid和master_repl_offset（标识与主实例同步的最后一个快照）请求部分复制。如果主实例接收部分复制的话则从最后一个偏移量开始增量进行部分复制，否则将进行全量复制
+
+# lazyfree-lazy-eviction
+针对redis内存使用达到maxmeory，并设置有淘汰策略时；在被动淘汰键时，是否采用lazy free机制；
+因为此场景开启lazy free, 可能使用淘汰键的内存释放不及时，导致redis内存超用，超过maxmemory的限制。此场景使用时，请结合业务测试。
+
+# lazyfree-lazy-expire
+针对设置有TTL的键，达到过期后，被redis清理删除时是否采用lazy free机制；
+此场景建议开启，因TTL本身是自适应调整的速度。
+
+# lazyfree-lazy-server-del
+针对有些指令在处理已存在的键时，会带有一个隐式的DEL键的操作。如rename命令，当目标键已存在,redis会先删除目标键，如果这些目标键是一个big key,那就会引入阻塞删除的性能问题。 此参数设置就是解决这类问题，建议可开启。
+
+# slave-lazy-flush
+针对slave进行全量数据同步，slave在加载master的RDB文件前，会运行flushall来清理自己的数据场景，
+参数设置决定是否采用异常flush机制。如果内存变动不大，建议可开启。可减少全量同步耗时，从而减少主库因输出缓冲区爆涨引起的内存使用增长。

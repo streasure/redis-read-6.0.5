@@ -167,27 +167,37 @@ void feedReplicationBacklog(void *ptr, size_t len) {
 
     /* This is a circular buffer, so write as much data we can at every
      * iteration and rewind the "idx" index if we reach the limit. */
-    while(len) {
+    while(len) {//这边会循环往里面去写
         //获取还剩多少剩余位置
         size_t thislen = server.repl_backlog_size - server.repl_backlog_idx;
+        //如果长度不够怎么处理
         if (thislen > len) thislen = len;
+        //先数据复制进去一部分
         memcpy(server.repl_backlog+server.repl_backlog_idx,p,thislen);
+        //可以直接超出
         server.repl_backlog_idx += thislen;
+        //如果到上限直接到起点
         if (server.repl_backlog_idx == server.repl_backlog_size)
             server.repl_backlog_idx = 0;
+        //获取没有复制进去的长度
         len -= thislen;
+        //指针迁移到没有复制的地址首位
         p += thislen;
+        //更新实际使用的长度大小加上实际复制进数据的长度
         server.repl_backlog_histlen += thislen;
     }
+    //如果已使用的超了直接置为最大值
     if (server.repl_backlog_histlen > server.repl_backlog_size)
         server.repl_backlog_histlen = server.repl_backlog_size;
     /* Set the offset of the first byte we have in the backlog. */
+    //修改backlog的第一个偏移字节位置
     server.repl_backlog_off = server.master_repl_offset -
                               server.repl_backlog_histlen + 1;
 }
 
 /* Wrapper for feedReplicationBacklog() that takes Redis string objects
  * as input. */
+//将robj中的元素加入到backlog中
 void feedReplicationBacklogWithObject(robj *o) {
     char llstr[LONG_STR_SIZE];
     void *p;

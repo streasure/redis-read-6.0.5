@@ -289,6 +289,15 @@ void trackingRememberKeyToBroadcast(client *c, char *keyname, size_t keylen) {
  * of memory pressure: in that case the key didn't really change, so we want
  * just to notify the clients that are in the table for this key, that would
  * otherwise miss the fact we are no longer tracking the key for them. */
+/*
+当某个键更改值时，这个函数会从signalModifiedKey（）或Redis中的其他位置被调用。
+任务是向每个可能拥有此类缓存跟踪这个key上下文的客户端发送通知。
+
+请注意，如果操作客户端之外执行的，“c”可能为NULL（例如，当我们因为过期而删除密钥时）。
+
+当这个func被redis内部调用时，最后一个参数“bcast”告诉函数是否也应该在bcast模式下向客户端广播这个key。
+我们也调用该函数以便在内存压力的情况下收回键表中的键：在这种情况下，键实际上没有改变，所以我们只想通知在用这key的客户端我们将不再为他们维护这个key。
+*/
 void trackingInvalidateKeyRaw(client *c, char *key, size_t keylen, int bcast) {
     if (TrackingTable == NULL) return;
 
@@ -338,6 +347,7 @@ void trackingInvalidateKeyRaw(client *c, char *key, size_t keylen, int bcast) {
 
 /* Wrapper (the one actually called across the core) to pass the key
  * as object. */
+//将key包装成obj传递，所有的数据都以robj的格式传递
 void trackingInvalidateKey(client *c, robj *keyobj) {
     trackingInvalidateKeyRaw(c,keyobj->ptr,sdslen(keyobj->ptr),1);
 }

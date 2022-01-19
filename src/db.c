@@ -156,9 +156,11 @@ robj *lookupKeyRead(redisDb *db, robj *key) {
  *
  * Returns the linked value object if the key exists or NULL if the key
  * does not exist in the specified DB. */
+//查看db中是否有这个key
 robj *lookupKeyWriteWithFlags(redisDb *db, robj *key, int flags) {
-    //是否过期
+    //是否过期，妈的结果居然没用到
     expireIfNeeded(db,key);
+    //返回key
     return lookupKey(db,key,flags);
 }
 
@@ -184,15 +186,19 @@ robj *lookupKeyWriteOrReply(client *c, robj *key, robj *reply) {
  * counter of the value if needed.
  *
  * The program is aborted if the key already exists. */
+//db中添加key，存在直接中断
 void dbAdd(redisDb *db, robj *key, robj *val) {
+    //复制key
     sds copy = sdsdup(key->ptr);
+    //在db所在的dict中插入key-value
     int retval = dictAdd(db->dict, copy, val);
 
     serverAssertWithInfo(NULL,key,retval == DICT_OK);
     if (val->type == OBJ_LIST ||
         val->type == OBJ_ZSET ||
         val->type == OBJ_STREAM)
-        signalKeyAsReady(db, key);
+        signalKeyAsReady(db, key);//代表key在server和db的dict中都准备好
+    //集群数据增加
     if (server.cluster_enabled) slotToKeyAdd(key->ptr);
 }
 
@@ -311,11 +317,14 @@ robj *dbRandomKey(redisDb *db) {
 }
 
 /* Delete a key, value, and associated expiration entry if any, from the DB */
+//直接删除db中key
 int dbSyncDelete(redisDb *db, robj *key) {
     /* Deleting an entry from the expires dict will not free the sds of
      * the key, because it is shared with the main dictionary. */
+    //删除过期的keys中对应的key
     if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
-    if (dictDelete(db->dict,key->ptr) == DICT_OK) {
+    if (dictDelete(db->dict,key->ptr) == DICT_OK) {//删除原数据的key
+        //判断是否开启了集群，对集群中key做插入和删除处理
         if (server.cluster_enabled) slotToKeyDel(key->ptr);
         return 1;
     } else {
@@ -479,9 +488,10 @@ long long dbTotalServerKeyCount() {
 
 /* Note that the 'c' argument may be NULL if the key was modified out of
  * a context of a client. */
+//如果在client之外修改了key，c可能会null
 void signalModifiedKey(client *c, redisDb *db, robj *key) {
-    touchWatchedKey(db,key);
-    trackingInvalidateKey(c,key);
+    touchWatchedKey(db,key);//修改监听这个key的客户端标记
+    trackingInvalidateKey(c,key);//通知客户端修改
 }
 
 void signalFlushedDb(int dbid) {
@@ -1354,9 +1364,12 @@ int expireIfNeeded(redisDb *db, robj *key) {
     //推送key过期
     notifyKeyspaceEvent(NOTIFY_EXPIRED,
         "expired",key,db->id);
+    //根据过期规则，判断是同步还是异步删除
     int retval = server.lazyfree_lazy_expire ? dbAsyncDelete(db,key) :
                                                dbSyncDelete(db,key);
+    //判断是否删除成功
     if (retval) signalModifiedKey(NULL,db,key);
+    //返回删除结果
     return retval;
 }
 
@@ -1704,29 +1717,40 @@ int *xreadGetKeys(struct redisCommand *cmd, robj **argv, int argc, int *numkeys)
  * a fast way a key that belongs to a specified hash slot. This is useful
  * while rehashing the cluster and in other conditions when we need to
  * understand if we have keys for a given hash slot. */
+/*
+根据add判断插入key还是删除key
+*/
 void slotToKeyUpdateKey(sds key, int add) {
+    //获取key的长度
     size_t keylen = sdslen(key);
+    //获取这个key的hash值
     unsigned int hashslot = keyHashSlot(key,keylen);
     unsigned char buf[64];
     unsigned char *indexed = buf;
-
+    //对集群的hash表中的hash位置计数++/--
     server.cluster->slots_keys_count[hashslot] += add ? 1 : -1;
+    //key长度大于64，需要多申请重新申请空间，大小为2+keylen
     if (keylen+2 > 64) indexed = zmalloc(keylen+2);
+    //将hash值放在index前两位
     indexed[0] = (hashslot >> 8) & 0xff;
     indexed[1] = hashslot & 0xff;
+    //index的数据为前两位存储的是key的长度，后面的为key的原数据
     memcpy(indexed+2,key,keylen);
-    if (add) {
+    if (add) {//如果增加
         raxInsert(server.cluster->slots_to_keys,indexed,keylen+2,NULL,NULL);
-    } else {
+    } else {//如果删除
         raxRemove(server.cluster->slots_to_keys,indexed,keylen+2,NULL);
     }
+    //如果index为新申请的空间需要释放，不然为原始的buf会在函数结束系统回收
     if (indexed != buf) zfree(indexed);
 }
 
+//向集群数据中插入key
 void slotToKeyAdd(sds key) {
     slotToKeyUpdateKey(key,1);
 }
 
+//删除集群中的key
 void slotToKeyDel(sds key) {
     slotToKeyUpdateKey(key,0);
 }

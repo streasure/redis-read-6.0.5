@@ -506,6 +506,11 @@ static inline size_t raxLowWalk(rax *rax, unsigned char *s, size_t len, raxNode 
  * function returns 0 as well but sets errno to ENOMEM, otherwise errno will
  * be set to 0.
  */
+/*
+插入大小为“len”的元素“s”，将指针“data”设置为辅助数据。如果元素已存在，则关联数据将更新（仅当“覆盖”设置为1时），并返回0，
+否则将插入元素并返回1。内存不足时，函数也返回0，但将errno设置为ENOMEM，否则errno将设置为0
+*/
+//TODO 详细读
 int raxGenericInsert(rax *rax, unsigned char *s, size_t len, void *data, void **old, int overwrite) {
     size_t i;
     int j = 0; /* Split position. If raxLowWalk() stops in a compressed
@@ -901,6 +906,7 @@ oom:
 
 /* Overwriting insert. Just a wrapper for raxGenericInsert() that will
  * update the element if there is already one for the same key. */
+//插入一个数据，如果已经有相同键则覆盖
 int raxInsert(rax *rax, unsigned char *s, size_t len, void *data, void **old) {
     return raxGenericInsert(rax,s,len,data,old,1);
 }
@@ -1019,6 +1025,8 @@ raxNode *raxRemoveChild(raxNode *parent, raxNode *child) {
 
 /* Remove the specified item. Returns 1 if the item was found and
  * deleted, 0 otherwise. */
+//删除指定的项目。如果找到并删除了项目，则返回1，否则返回0。
+//TODO 仔细阅读
 int raxRemove(rax *rax, unsigned char *s, size_t len, void **old) {
     raxNode *h;
     raxStack ts;

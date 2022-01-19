@@ -233,6 +233,7 @@ robj *dupStringObject(const robj *o) {
     }
 }
 
+//创建一个quicklist
 robj *createQuicklistObject(void) {
     quicklist *l = quicklistCreate();
     robj *o = createObject(OBJ_LIST,l);
