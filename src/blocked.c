@@ -82,9 +82,11 @@ typedef struct bkinfo {
 /* Block a client for the specific operation type. Once the CLIENT_BLOCKED
  * flag is set client query buffer is not longer processed, but accumulated,
  * and will be processed when the client is unblocked. */
+//以btype的方式阻塞这个client
 void blockClient(client *c, int btype) {
     c->flags |= CLIENT_BLOCKED;
     c->btype = btype;
+    //阻塞计数
     server.blocked_clients++;
     server.blocked_clients_by_type[btype]++;
     addClientToTimeoutTable(c);
@@ -553,6 +555,12 @@ void handleClientsBlockedOnKeys(void) {
  * stream keys, we also provide an array of streamID structures: clients will
  * be unblocked only when items with an ID greater or equal to the specified
  * one is appended to the stream. */
+/*
+keys：元数据
+numkeys：数据个数
+timeout：过期时间戳
+target：操作对象
+*/
 void blockForKeys(client *c, int btype, robj **keys, int numkeys, mstime_t timeout, robj *target, streamID *ids) {
     dictEntry *de;
     list *l;
@@ -560,7 +568,7 @@ void blockForKeys(client *c, int btype, robj **keys, int numkeys, mstime_t timeo
 
     c->bpop.timeout = timeout;
     c->bpop.target = target;
-
+    //key加引用
     if (target != NULL) incrRefCount(target);
 
     for (j = 0; j < numkeys; j++) {
@@ -570,29 +578,33 @@ void blockForKeys(client *c, int btype, robj **keys, int numkeys, mstime_t timeo
         if (btype == BLOCKED_STREAM)
             bki->stream_id = ids[j];
 
-        /* If the key already exists in the dictionary ignore it. */
+        /* If the key already exists in the dictionary ignore it. *///如果这些key已被阻塞，不需要二次阻塞
         if (dictAdd(c->bpop.keys,keys[j],bki) != DICT_OK) {
             zfree(bki);
             continue;
         }
+        //引用计数++
         incrRefCount(keys[j]);
 
         /* And in the other "side", to map keys -> clients */
+        //查看客户端的阻塞列表有没有这个key
         de = dictFind(c->db->blocking_keys,keys[j]);
         if (de == NULL) {
             int retval;
 
             /* For every key we take a list of clients blocked for it */
-            l = listCreate();
+            l = listCreate();//给这个key创建一个阻塞的client列表
             retval = dictAdd(c->db->blocking_keys,keys[j],l);
             incrRefCount(keys[j]);
             serverAssertWithInfo(c,keys[j],retval == DICT_OK);
         } else {
             l = dictGetVal(de);
         }
-        listAddNodeTail(l,c);
+        //c->db->blocking_keys:map[key][]client
+        listAddNodeTail(l,c);//将这个客户端加入阻塞组
         bki->listnode = listLast(l);
     }
+    //以btype的防止标记c的阻塞方式
     blockClient(c,btype);
 }
 

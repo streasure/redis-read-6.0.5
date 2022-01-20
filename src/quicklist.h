@@ -152,7 +152,7 @@ typedef struct quicklistIter {
 typedef struct quicklistEntry {
     const quicklist *quicklist;
     quicklistNode *node;//操作的node
-    unsigned char *zi;//node中zl需要操作的entry位置
+    unsigned char *zi;//node中zl需要操作的entry位置，结构为ziplist
     unsigned char *value;
     long long longval;
     unsigned int sz;

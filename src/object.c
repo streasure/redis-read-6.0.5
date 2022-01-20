@@ -731,6 +731,7 @@ int getLongLongFromObject(robj *o, long long *target) {
     return C_OK;
 }
 
+//将o中的数据转化为longlong的target
 int getLongLongFromObjectOrReply(client *c, robj *o, long long *target, const char *msg) {
     long long value;
     if (getLongLongFromObject(o, &value) != C_OK) {
@@ -745,6 +746,7 @@ int getLongLongFromObjectOrReply(client *c, robj *o, long long *target, const ch
     return C_OK;
 }
 
+//将robj中的值转化为long*的target
 int getLongFromObjectOrReply(client *c, robj *o, long *target, const char *msg) {
     long long value;
 

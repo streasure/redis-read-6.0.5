@@ -111,6 +111,7 @@ void decodeTimeoutKey(unsigned char *buf, uint64_t *toptr, client **cptr) {
 /* Add the specified client id / timeout as a key in the radix tree we use
  * to handle blocked clients timeouts. The client is not added to the list
  * if its timeout is zero (block forever). */
+//将这个客户端加到超时的客户端列表中
 void addClientToTimeoutTable(client *c) {
     if (c->bpop.timeout == 0) return;
     uint64_t timeout = c->bpop.timeout;
@@ -160,6 +161,7 @@ void handleBlockedClientsTimeout(void) {
  * Note that if the timeout is zero (usually from the point of view of
  * commands API this means no timeout) the value stored into 'timeout'
  * is zero. */
+//根据unit将object中的数字毫秒数
 int getTimeoutFromObjectOrReply(client *c, robj *object, mstime_t *timeout, int unit) {
     long long tval;
     long double ftval;
@@ -179,7 +181,7 @@ int getTimeoutFromObjectOrReply(client *c, robj *object, mstime_t *timeout, int 
         addReplyError(c,"timeout is negative");
         return C_ERR;
     }
-
+    //timeout最后都是毫秒数
     if (tval > 0) {
         tval += mstime();
     }

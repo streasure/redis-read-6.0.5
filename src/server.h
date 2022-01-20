@@ -258,14 +258,14 @@ typedef long long ustime_t; /* microsecond time type. */
 #define CLIENT_PROTOCOL_ERROR (1ULL<<39) /* Protocol error chatting with it. */
 
 /* Client block type (btype field in client structure)
- * if CLIENT_BLOCKED flag is set. */
-#define BLOCKED_NONE 0    /* Not blocked, no CLIENT_BLOCKED flag set. */
+ * if CLIENT_BLOCKED flag is set. *///阻塞类型
+#define BLOCKED_NONE 0    /* Not blocked, no CLIENT_BLOCKED flag set. *///不阻塞
 #define BLOCKED_LIST 1    /* BLPOP & co. */
-#define BLOCKED_WAIT 2    /* WAIT for synchronous replication. */
-#define BLOCKED_MODULE 3  /* Blocked by a loadable module. */
+#define BLOCKED_WAIT 2    /* WAIT for synchronous replication. *///等待同步回复
+#define BLOCKED_MODULE 3  /* Blocked by a loadable module. *///被可加载模块阻塞
 #define BLOCKED_STREAM 4  /* XREAD. */
 #define BLOCKED_ZSET 5    /* BZPOP et al. */
-#define BLOCKED_NUM 6     /* Number of blocked states. */
+#define BLOCKED_NUM 6     /* Number of blocked states. *///阻塞状态数量
 
 /* Client request types */
 #define PROTO_REQ_INLINE 1
