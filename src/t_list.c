@@ -716,8 +716,8 @@ void rpoplpushCommand(client *c) {
         //key引用-1，代表已操作完
         decrRefCount(touchedkey);
         server.dirty++;
-        //如果操作指令为BRPOPLPUSH，代表没有被阻塞
-        if (c->cmd->proc == brpoplpushCommand) {
+        //如果操作指令为BRPOPLPUSH，代表取到了元素没有被阻塞
+        if (c->cmd->proc == brpoplpushCommand) {//对这个客户端内部维护的这个cmd的元素robj生成新的robj并抛弃之前的robj
             rewriteClientCommandVector(c,3,shared.rpoplpush,c->argv[1],c->argv[2]);
         }
     }
@@ -801,34 +801,35 @@ void blockingPopGenericCommand(client *c, int where) {
     robj *o;
     mstime_t timeout;
     int j;
-
+    //转换timeout
     if (getTimeoutFromObjectOrReply(c,c->argv[c->argc-1],&timeout,UNIT_SECONDS)
         != C_OK) return;
-
+    //参数从key-timeout-1
     for (j = 1; j < c->argc-1; j++) {
         o = lookupKeyWrite(c->db,c->argv[j]);
-        if (o != NULL) {
-            if (o->type != OBJ_LIST) {
+        if (o != NULL) {//如果找到了key
+            if (o->type != OBJ_LIST) {//类型不对
                 addReply(c,shared.wrongtypeerr);
                 return;
             } else {
-                if (listTypeLength(o) != 0) {
+                if (listTypeLength(o) != 0) {//如果对象的长度不为0，直接就返回了
                     /* Non empty list, this is like a non normal [LR]POP. */
-                    char *event = (where == LIST_HEAD) ? "lpop" : "rpop";
-                    robj *value = listTypePop(o,where);
+                    char *event = (where == LIST_HEAD) ? "lpop" : "rpop";//看是头节点还是尾节点pop
+                    robj *value = listTypePop(o,where);//获取元素
                     serverAssert(value != NULL);
 
-                    addReplyArrayLen(c,2);
-                    addReplyBulk(c,c->argv[j]);
-                    addReplyBulk(c,value);
-                    decrRefCount(value);
+                    addReplyArrayLen(c,2);//将数据加到回包
+                    addReplyBulk(c,c->argv[j]);//key值
+                    addReplyBulk(c,value);//数据
+                    decrRefCount(value);//减少引用
                     notifyKeyspaceEvent(NOTIFY_LIST,event,
                                         c->argv[j],c->db->id);
-                    if (listTypeLength(o) == 0) {
+                    if (listTypeLength(o) == 0) {//如果这个key元素空了需要删除这个key
                         dbDelete(c->db,c->argv[j]);
                         notifyKeyspaceEvent(NOTIFY_GENERIC,"del",
                                             c->argv[j],c->db->id);
                     }
+                    //通知客户端更新对key的引用
                     signalModifiedKey(c,c->db,c->argv[j]);
                     server.dirty++;
 
@@ -844,12 +845,13 @@ void blockingPopGenericCommand(client *c, int where) {
 
     /* If we are inside a MULTI/EXEC and the list is empty the only thing
      * we can do is treating it as a timeout (even with timeout 0). */
-    if (c->flags & CLIENT_MULTI) {
+    if (c->flags & CLIENT_MULTI) {//如果有多个客户端所以直接就返回null
         addReplyNullArray(c);
         return;
     }
 
     /* If the list is empty or the key does not exists we must block */
+    //修改server的blockkey信息
     blockForKeys(c,BLOCKED_LIST,c->argv + 1,c->argc - 2,timeout,NULL,NULL);
 }
 

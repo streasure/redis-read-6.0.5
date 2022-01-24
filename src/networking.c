@@ -2569,6 +2569,9 @@ void securityWarningCommand(client *c) {
 /* Rewrite the command vector of the client. All the new objects ref count
  * is incremented. The old command vector is freed, and the old objects
  * ref count is decremented. */
+/*
+重写所有指向这个key的客户端，将这个指令所有的元素生成新的key并将引用增加，老key的引用计数减少
+*/
 void rewriteClientCommandVector(client *c, int argc, ...) {
     va_list ap;
     int j;
@@ -2576,7 +2579,7 @@ void rewriteClientCommandVector(client *c, int argc, ...) {
 
     argv = zmalloc(sizeof(robj*)*argc);
     va_start(ap,argc);
-    for (j = 0; j < argc; j++) {
+    for (j = 0; j < argc; j++) {//对client中的所有key的位置都加一个引用计数
         robj *a;
 
         a = va_arg(ap, robj*);
@@ -2586,13 +2589,13 @@ void rewriteClientCommandVector(client *c, int argc, ...) {
     /* We free the objects in the original vector at the end, so we are
      * sure that if the same objects are reused in the new vector the
      * refcount gets incremented before it gets decremented. */
-    for (j = 0; j < c->argc; j++) decrRefCount(c->argv[j]);
-    zfree(c->argv);
+    for (j = 0; j < c->argc; j++) decrRefCount(c->argv[j]);//释放这个client的老key的引用
+    zfree(c->argv);//释放client自带的cmd引用
     /* Replace argv and argc with our new versions. */
-    c->argv = argv;
-    c->argc = argc;
-    c->cmd = lookupCommandOrOriginal(c->argv[0]->ptr);
-    serverAssertWithInfo(c,NULL,c->cmd != NULL);
+    c->argv = argv;//用新的引用代替老的cmd
+    c->argc = argc;//定位client的cmd索引
+    c->cmd = lookupCommandOrOriginal(c->argv[0]->ptr);//argv的第一个就是操作cmd
+    serverAssertWithInfo(c,NULL,c->cmd != NULL);//判断是不是cmd为空
     va_end(ap);
 }
 
