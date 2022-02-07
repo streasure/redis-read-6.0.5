@@ -33,19 +33,20 @@
 #include <stdint.h>
 
 typedef struct intset {
-    uint32_t encoding;
-    uint32_t length;
-    int8_t contents[];
+    uint32_t encoding;//代表存放的最大数的数据类型 short/int/longlong
+    uint32_t length;//存放了多少个数据
+    //存储的数据是从大到小有序的按照encoding获取后反转就是原数据
+    int8_t contents[];//实际数据,看_intsetGetEncoded这个函数就知道里面的数据如何获取和存储
 } intset;
 
-intset *intsetNew(void);
-intset *intsetAdd(intset *is, int64_t value, uint8_t *success);
-intset *intsetRemove(intset *is, int64_t value, int *success);
-uint8_t intsetFind(intset *is, int64_t value);
-int64_t intsetRandom(intset *is);
-uint8_t intsetGet(intset *is, uint32_t pos, int64_t *value);
-uint32_t intsetLen(const intset *is);
-size_t intsetBlobLen(intset *is);
+intset *intsetNew(void);//创建一个空的intset
+intset *intsetAdd(intset *is, int64_t value, uint8_t *success);//插入一个元素，会将最新的对象返回回来
+intset *intsetRemove(intset *is, int64_t value, int *success);//在intset中删除value，返回最新的intset
+uint8_t intsetFind(intset *is, int64_t value);//查看这个value是否在这个intset中
+int64_t intsetRandom(intset *is);//随机获取一个intset中的一个值
+uint8_t intsetGet(intset *is, uint32_t pos, int64_t *value);//获取intset在pos位置的数据将数据赋值给value
+uint32_t intsetLen(const intset *is);//返回intset的长度
+size_t intsetBlobLen(intset *is);//返回intset占用的字节总长度
 
 #ifdef REDIS_TEST
 int intsetTest(int argc, char *argv[]);
