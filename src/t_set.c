@@ -39,38 +39,38 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
 /* Factory method to return a set that *can* hold "value". When the object has
  * an integer-encodable value, an intset will be returned. Otherwise a regular
  * hash table. */
-/*
-工具函数返回一个robj
-根据value是否可被
-*/
+//工具函数返回一个robj根据value判断是intset还是dict
 robj *setTypeCreate(sds value) {
     //判断是否可被转化为longlong
     if (isSdsRepresentableAsLongLong(value,NULL) == C_OK)
-        return createIntsetObject();
-    return createSetObject();
+        return createIntsetObject();//intset
+    return createSetObject();//dict
 }
 
 /* Add the specified value into a set.
  *
  * If the value was already member of the set, nothing is done and 0 is
  * returned, otherwise the new element is added and 1 is returned. */
+//set中插入数据value，结果可能为intset或者dict
 int setTypeAdd(robj *subject, sds value) {
     long long llval;
-    if (subject->encoding == OBJ_ENCODING_HT) {
+    if (subject->encoding == OBJ_ENCODING_HT) {//如果为dict
         dict *ht = subject->ptr;
+        //将这个value直接插入这个dict
         dictEntry *de = dictAddRaw(ht,value,NULL);
-        if (de) {
+        if (de) {//如果成功插入需要将value拷贝一份不然会被释放
             dictSetKey(ht,de,sdsdup(value));
             dictSetVal(ht,de,NULL);
             return 1;
         }
-    } else if (subject->encoding == OBJ_ENCODING_INTSET) {
-        if (isSdsRepresentableAsLongLong(value,&llval) == C_OK) {
+    } else if (subject->encoding == OBJ_ENCODING_INTSET) {//如果是intset
+        if (isSdsRepresentableAsLongLong(value,&llval) == C_OK) {//如果可被插入
             uint8_t success = 0;
             subject->ptr = intsetAdd(subject->ptr,llval,&success);
-            if (success) {
+            if (success) {//如果成功
                 /* Convert to regular set when the intset contains
                  * too many entries. */
+                //如果inset的值的数量超过系统设置的最大上限
                 if (intsetLen(subject->ptr) > server.set_max_intset_entries)
                     setTypeConvert(subject,OBJ_ENCODING_HT);
                 return 1;
@@ -90,15 +90,16 @@ int setTypeAdd(robj *subject, sds value) {
     return 0;
 }
 
+//删除set中值为value的元素
 int setTypeRemove(robj *setobj, sds value) {
     long long llval;
-    if (setobj->encoding == OBJ_ENCODING_HT) {
-        if (dictDelete(setobj->ptr,value) == DICT_OK) {
-            if (htNeedsResize(setobj->ptr)) dictResize(setobj->ptr);
+    if (setobj->encoding == OBJ_ENCODING_HT) {//dict remove
+        if (dictDelete(setobj->ptr,value) == DICT_OK) {//数据删除
+            if (htNeedsResize(setobj->ptr)) dictResize(setobj->ptr);//查看是否需要resize
             return 1;
         }
     } else if (setobj->encoding == OBJ_ENCODING_INTSET) {
-        if (isSdsRepresentableAsLongLong(value,&llval) == C_OK) {
+        if (isSdsRepresentableAsLongLong(value,&llval) == C_OK) {//value可被表示
             int success;
             setobj->ptr = intsetRemove(setobj->ptr,llval,&success);
             if (success) return 1;
@@ -109,6 +110,7 @@ int setTypeRemove(robj *setobj, sds value) {
     return 0;
 }
 
+//查找value在set中是否存在
 int setTypeIsMember(robj *subject, sds value) {
     long long llval;
     if (subject->encoding == OBJ_ENCODING_HT) {
@@ -123,20 +125,23 @@ int setTypeIsMember(robj *subject, sds value) {
     return 0;
 }
 
+//创建set的迭代器
 setTypeIterator *setTypeInitIterator(robj *subject) {
     setTypeIterator *si = zmalloc(sizeof(setTypeIterator));
     si->subject = subject;
     si->encoding = subject->encoding;
+    //根据encoding的不同创建不同的迭代器
     if (si->encoding == OBJ_ENCODING_HT) {
         si->di = dictGetIterator(subject->ptr);
     } else if (si->encoding == OBJ_ENCODING_INTSET) {
-        si->ii = 0;
+        si->ii = 0;//intset中的pos
     } else {
         serverPanic("Unknown set encoding");
     }
     return si;
 }
 
+//释放set的迭代器
 void setTypeReleaseIterator(setTypeIterator *si) {
     if (si->encoding == OBJ_ENCODING_HT)
         dictReleaseIterator(si->di);
@@ -156,14 +161,15 @@ void setTypeReleaseIterator(setTypeIterator *si) {
  * used field with values which are easy to trap if misused.
  *
  * When there are no longer elements -1 is returned. */
+//获取si指向的subject的下一个元素，dict中的key放在sdsele，intset中的key放在llele
 int setTypeNext(setTypeIterator *si, sds *sdsele, int64_t *llele) {
-    if (si->encoding == OBJ_ENCODING_HT) {
-        dictEntry *de = dictNext(si->di);
-        if (de == NULL) return -1;
-        *sdsele = dictGetKey(de);
+    if (si->encoding == OBJ_ENCODING_HT) {//如果是dict
+        dictEntry *de = dictNext(si->di);//获取下一个entry
+        if (de == NULL) return -1;//元素遍历完
+        *sdsele = dictGetKey(de);//获取key
         *llele = -123456789; /* Not needed. Defensive. */
-    } else if (si->encoding == OBJ_ENCODING_INTSET) {
-        if (!intsetGet(si->subject->ptr,si->ii++,llele))
+    } else if (si->encoding == OBJ_ENCODING_INTSET) {//如果为intset
+        if (!intsetGet(si->subject->ptr,si->ii++,llele))//获取下标ii的数据
             return -1;
         *sdsele = NULL; /* Not needed. Defensive. */
     } else {
@@ -210,9 +216,10 @@ sds setTypeNextObject(setTypeIterator *si) {
  * Note that both the sdsele and llele pointers should be passed and cannot
  * be NULL since the function will try to defensively populate the non
  * used field with values which are easy to trap if misused. */
+//随机获取set中的一个值，dict将值赋给sdsele，intset赋值给llele
 int setTypeRandomElement(robj *setobj, sds *sdsele, int64_t *llele) {
     if (setobj->encoding == OBJ_ENCODING_HT) {
-        dictEntry *de = dictGetFairRandomKey(setobj->ptr);
+        dictEntry *de = dictGetFairRandomKey(setobj->ptr);//获取一个随机key
         *sdsele = dictGetKey(de);
         *llele = -123456789; /* Not needed. Defensive. */
     } else if (setobj->encoding == OBJ_ENCODING_INTSET) {
@@ -224,10 +231,11 @@ int setTypeRandomElement(robj *setobj, sds *sdsele, int64_t *llele) {
     return setobj->encoding;
 }
 
+//获取这个set的数据个数
 unsigned long setTypeSize(const robj *subject) {
-    if (subject->encoding == OBJ_ENCODING_HT) {
+    if (subject->encoding == OBJ_ENCODING_HT) {//dict
         return dictSize((const dict*)subject->ptr);
-    } else if (subject->encoding == OBJ_ENCODING_INTSET) {
+    } else if (subject->encoding == OBJ_ENCODING_INTSET) {//intset
         return intsetLen((const intset*)subject->ptr);
     } else {
         serverPanic("Unknown set encoding");
@@ -237,82 +245,99 @@ unsigned long setTypeSize(const robj *subject) {
 /* Convert the set to specified encoding. The resulting dict (when converting
  * to a hash table) is presized to hold the number of elements in the original
  * set. */
+//将intset转化为dict
 void setTypeConvert(robj *setobj, int enc) {
     setTypeIterator *si;
     serverAssertWithInfo(NULL,setobj,setobj->type == OBJ_SET &&
                              setobj->encoding == OBJ_ENCODING_INTSET);
 
-    if (enc == OBJ_ENCODING_HT) {
+    if (enc == OBJ_ENCODING_HT) {//只对dict类型做处理
         int64_t intele;
+        //创建set专用的dict
         dict *d = dictCreate(&setDictType,NULL);
         sds element;
 
         /* Presize the dict to avoid rehashing */
+        //申请intset大小的空间
         dictExpand(d,intsetLen(setobj->ptr));
 
         /* To add the elements we extract integers and create redis objects */
-        si = setTypeInitIterator(setobj);
-        while (setTypeNext(si,&element,&intele) != -1) {
+        si = setTypeInitIterator(setobj);//获取迭代器
+        while (setTypeNext(si,&element,&intele) != -1) {//这边只能是从intset->dict所以直接将数据转化为sds存入dict即可
             element = sdsfromlonglong(intele);
             serverAssert(dictAdd(d,element,NULL) == DICT_OK);
         }
+        //释放iterator
         setTypeReleaseIterator(si);
 
-        setobj->encoding = OBJ_ENCODING_HT;
-        zfree(setobj->ptr);
-        setobj->ptr = d;
+        setobj->encoding = OBJ_ENCODING_HT;//修改encoding方式
+        zfree(setobj->ptr);//释放原来的intset
+        setobj->ptr = d;//将dict的数据赋值给原来的位置
     } else {
         serverPanic("Unsupported set conversion");
     }
 }
-
+/////////////////////////////////////////////////////////command////////////////////////////////////////////////
+/*
+SADD key member [member …]
+将一个或多个 member 元素加入到集合 key 当中，已经存在于集合的 member 元素将被忽略。
+假如 key 不存在，则创建一个只包含 member 元素作成员的集合。
+当 key 不是集合类型时，返回一个错误。
+*/
 void saddCommand(client *c) {
     robj *set;
     int j, added = 0;
-
+    //查找这个key是否存在
     set = lookupKeyWrite(c->db,c->argv[1]);
     if (set == NULL) {
         set = setTypeCreate(c->argv[2]->ptr);
-        dbAdd(c->db,c->argv[1],set);
+        dbAdd(c->db,c->argv[1],set);//添加key
     } else {
-        if (set->type != OBJ_SET) {
+        if (set->type != OBJ_SET) {//key类型不对
             addReply(c,shared.wrongtypeerr);
             return;
         }
     }
-
+    //added为成功添加的个数
     for (j = 2; j < c->argc; j++) {
         if (setTypeAdd(set,c->argv[j]->ptr)) added++;
     }
-    if (added) {
+    if (added) {//如果有新加的元素代表数据有变化
         signalModifiedKey(c,c->db,c->argv[1]);
         notifyKeyspaceEvent(NOTIFY_SET,"sadd",c->argv[1],c->db->id);
     }
+    //修改redis被修改的次数
     server.dirty += added;
     addReplyLongLong(c,added);
 }
 
+
+/*
+SREM key member [member …]
+移除集合 key 中的一个或多个 member 元素，不存在的 member 元素会被忽略。
+当 key 不是集合类型，返回一个错误。
+*/
 void sremCommand(client *c) {
     robj *set;
     int j, deleted = 0, keyremoved = 0;
-
+    //查看key是否可被写
     if ((set = lookupKeyWriteOrReply(c,c->argv[1],shared.czero)) == NULL ||
         checkType(c,set,OBJ_SET)) return;
 
-    for (j = 2; j < c->argc; j++) {
+    for (j = 2; j < c->argc; j++) {//挨个删除
         if (setTypeRemove(set,c->argv[j]->ptr)) {
-            deleted++;
-            if (setTypeSize(set) == 0) {
+            deleted++;//成功删除的数量
+            if (setTypeSize(set) == 0) {//如果set没有数据则删除key
                 dbDelete(c->db,c->argv[1]);
                 keyremoved = 1;
                 break;
             }
         }
     }
-    if (deleted) {
+    if (deleted) {//如果有删除的元素
         signalModifiedKey(c,c->db,c->argv[1]);
         notifyKeyspaceEvent(NOTIFY_SET,"srem",c->argv[1],c->db->id);
-        if (keyremoved)
+        if (keyremoved)//key删除
             notifyKeyspaceEvent(NOTIFY_GENERIC,"del",c->argv[1],
                                 c->db->id);
         server.dirty += deleted;
@@ -320,14 +345,26 @@ void sremCommand(client *c) {
     addReplyLongLong(c,deleted);
 }
 
+/*
+SMOVE source destination member
+将 member 元素从 source 集合移动到 destination 集合。
+SMOVE是原子性操作。
+如果source集合不存在或不包含指定的member元素，则SMOVE命令不执行任何操作，仅返回0。
+否则，member元素从source 集合中被移除，并添加到destination集合中去。
+当destination集合已经包含member元素时，SMOVE命令只是简单地将source集合中的member元素删除。
+当source或destination不是集合类型时，返回一个错误。
+返回值
+如果member元素被成功移除，返回1。如果member元素不是source集合的成员，并且没有任何操作对destination集合执行，那么返回0。
+*/
 void smoveCommand(client *c) {
     robj *srcset, *dstset, *ele;
+    //获取两个set
     srcset = lookupKeyWrite(c->db,c->argv[1]);
     dstset = lookupKeyWrite(c->db,c->argv[2]);
-    ele = c->argv[3];
+    ele = c->argv[3];//member
 
     /* If the source key does not exist return 0 */
-    if (srcset == NULL) {
+    if (srcset == NULL) {//source不存在
         addReply(c,shared.czero);
         return;
     }
@@ -335,30 +372,30 @@ void smoveCommand(client *c) {
     /* If the source key has the wrong type, or the destination key
      * is set and has the wrong type, return with an error. */
     if (checkType(c,srcset,OBJ_SET) ||
-        (dstset && checkType(c,dstset,OBJ_SET))) return;
+        (dstset && checkType(c,dstset,OBJ_SET))) return;//判断key类型
 
     /* If srcset and dstset are equal, SMOVE is a no-op */
-    if (srcset == dstset) {
+    if (srcset == dstset) {//如果两个key一样，则不做处理
         addReply(c,setTypeIsMember(srcset,ele->ptr) ?
             shared.cone : shared.czero);
         return;
     }
 
     /* If the element cannot be removed from the src set, return 0. */
-    if (!setTypeRemove(srcset,ele->ptr)) {
+    if (!setTypeRemove(srcset,ele->ptr)) {//删除失败
         addReply(c,shared.czero);
         return;
     }
     notifyKeyspaceEvent(NOTIFY_SET,"srem",c->argv[1],c->db->id);
 
     /* Remove the src set from the database when empty */
-    if (setTypeSize(srcset) == 0) {
+    if (setTypeSize(srcset) == 0) {//判断是否需要删除key
         dbDelete(c->db,c->argv[1]);
         notifyKeyspaceEvent(NOTIFY_GENERIC,"del",c->argv[1],c->db->id);
     }
 
     /* Create the destination set when it doesn't exist */
-    if (!dstset) {
+    if (!dstset) {//如果目标路径为null则直接创建
         dstset = setTypeCreate(ele->ptr);
         dbAdd(c->db,c->argv[2],dstset);
     }
@@ -368,16 +405,22 @@ void smoveCommand(client *c) {
     server.dirty++;
 
     /* An extra key has changed when ele was successfully added to dstset */
-    if (setTypeAdd(dstset,ele->ptr)) {
+    if (setTypeAdd(dstset,ele->ptr)) {//插入成功
         server.dirty++;
         notifyKeyspaceEvent(NOTIFY_SET,"sadd",c->argv[2],c->db->id);
     }
     addReply(c,shared.cone);
 }
 
+/*
+SISMEMBER key member
+判断member元素是否集合key的成员。
+返回值
+如果member元素是集合的成员，返回1。如果member元素不是集合的成员，或key不存在，返回0。
+*/
 void sismemberCommand(client *c) {
     robj *set;
-
+    //是否可被读取，类型是否为set
     if ((set = lookupKeyReadOrReply(c,c->argv[1],shared.czero)) == NULL ||
         checkType(c,set,OBJ_SET)) return;
 
@@ -387,6 +430,12 @@ void sismemberCommand(client *c) {
         addReply(c,shared.czero);
 }
 
+/*
+SCARD key
+返回集合key的基数(集合中元素的数量)。
+返回值
+集合的基数。当key不存在时，返回0。
+*/
 void scardCommand(client *c) {
     robj *o;
 
@@ -403,15 +452,16 @@ void scardCommand(client *c) {
  * for us to use the "create new set" strategy? Read later in the
  * implementation for more info. */
 #define SPOP_MOVE_STRATEGY_MUL 5
-
+//spop key num 随机pop多个数
 void spopWithCountCommand(client *c) {
-    long l;
+    long l;//pop的数量
     unsigned long count, size;
     robj *set;
 
     /* Get the count argument */
+    //将参数中的数字获取出来
     if (getLongFromObjectOrReply(c,c->argv[2],&l,NULL) != C_OK) return;
-    if (l >= 0) {
+    if (l >= 0) {//判断是否值正确
         count = (unsigned long) l;
     } else {
         addReply(c,shared.outofrangeerr);
@@ -420,31 +470,32 @@ void spopWithCountCommand(client *c) {
 
     /* Make sure a key with the name inputted exists, and that it's type is
      * indeed a set. Otherwise, return nil */
+    //检测key是否存在并且key的type是否为set
     if ((set = lookupKeyWriteOrReply(c,c->argv[1],shared.emptyset[c->resp]))
         == NULL || checkType(c,set,OBJ_SET)) return;
 
     /* If count is zero, serve an empty set ASAP to avoid special
      * cases later. */
-    if (count == 0) {
+    if (count == 0) {//判断数量是否为0
         addReply(c,shared.emptyset[c->resp]);
         return;
     }
-
+    //获取set的数据量
     size = setTypeSize(set);
 
     /* Generate an SPOP keyspace notification */
     notifyKeyspaceEvent(NOTIFY_SET,"spop",c->argv[1],c->db->id);
-    server.dirty += count;
+    server.dirty += count;//增加服务端修改次数
 
     /* CASE 1:
      * The number of requested elements is greater than or equal to
      * the number of elements inside the set: simply return the whole set. */
-    if (count >= size) {
-        /* We just return the entire set */
+    if (count >= size) {//如果次数超过数据最大上限
+        /* We just return the entire set *///感觉调用了个寂寞
         sunionDiffGenericCommand(c,c->argv+1,1,NULL,SET_OP_UNION);
 
         /* Delete the set as it is now empty */
-        dbDelete(c->db,c->argv[1]);
+        dbDelete(c->db,c->argv[1]);//删除key
         notifyKeyspaceEvent(NOTIFY_GENERIC,"del",c->argv[1],c->db->id);
 
         /* Propagate this command as an DEL operation */
@@ -555,30 +606,39 @@ void spopWithCountCommand(client *c) {
     server.dirty++;
 }
 
+/*
+SPOP key [count]
+移除并返回集合中的一个/count个随机元素。
+如果只想获取一个随机元素，但不想该元素从集合中被移除的话，可以使用 SRANDMEMBER key [count] 命令。
+返回值
+被移除的随机元素。 当key不存在或key是空集时，返回nil 。
+*/
 void spopCommand(client *c) {
     robj *set, *ele, *aux;
     sds sdsele;
     int64_t llele;
     int encoding;
 
-    if (c->argc == 3) {
+    if (c->argc == 3) {//pop多个
         spopWithCountCommand(c);
         return;
-    } else if (c->argc > 3) {
+    } else if (c->argc > 3) {//参数数量不对
         addReply(c,shared.syntaxerr);
         return;
     }
 
     /* Make sure a key with the name inputted exists, and that it's type is
      * indeed a set */
+    //key是否可修改
     if ((set = lookupKeyWriteOrReply(c,c->argv[1],shared.null[c->resp]))
          == NULL || checkType(c,set,OBJ_SET)) return;
 
     /* Get a random element from the set */
+    //获取一个随机的entry
     encoding = setTypeRandomElement(set,&sdsele,&llele);
 
     /* Remove the element from the set */
-    if (encoding == OBJ_ENCODING_INTSET) {
+    if (encoding == OBJ_ENCODING_INTSET) {//删除元素
         ele = createStringObjectFromLongLong(llele);
         set->ptr = intsetRemove(set->ptr,llele,NULL);
     } else {
@@ -784,6 +844,7 @@ int qsortCompareSetsByCardinality(const void *s1, const void *s2) {
 
 /* This is used by SDIFF and in this case we can receive NULL that should
  * be handled as empty sets. */
+//判断两个set的长度大小
 int qsortCompareSetsByRevCardinality(const void *s1, const void *s2) {
     robj *o1 = *(robj**)s1, *o2 = *(robj**)s2;
     unsigned long first = o1 ? setTypeSize(o1) : 0;
@@ -935,26 +996,26 @@ void sinterstoreCommand(client *c) {
 
 void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
                               robj *dstkey, int op) {
-    robj **sets = zmalloc(sizeof(robj*)*setnum);
-    setTypeIterator *si;
+    robj **sets = zmalloc(sizeof(robj*)*setnum);//获取临时变量
+    setTypeIterator *si;//set的迭代器
     robj *dstset = NULL;
     sds ele;
-    int j, cardinality = 0;
+    int j, cardinality = 0;//cardinality 为union操作过的元素个数
     int diff_algo = 1;
 
-    for (j = 0; j < setnum; j++) {
+    for (j = 0; j < setnum; j++) {//循环检测set
         robj *setobj = dstkey ?
             lookupKeyWrite(c->db,setkeys[j]) :
-            lookupKeyRead(c->db,setkeys[j]);
-        if (!setobj) {
+            lookupKeyRead(c->db,setkeys[j]);//判断对这个key的操作
+        if (!setobj) {//如果无法操作
             sets[j] = NULL;
             continue;
         }
-        if (checkType(c,setobj,OBJ_SET)) {
+        if (checkType(c,setobj,OBJ_SET)) {//判断key的类型是否正确
             zfree(sets);
             return;
         }
-        sets[j] = setobj;
+        sets[j] = setobj;//缓存set
     }
 
     /* Select what DIFF algorithm to use.
@@ -966,8 +1027,8 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
      * the sets.
      *
      * We compute what is the best bet with the current input here. */
-    if (op == SET_OP_DIFF && sets[0]) {
-        long long algo_one_work = 0, algo_two_work = 0;
+    if (op == SET_OP_DIFF && sets[0]) {//判断操作
+        long long algo_one_work = 0, algo_two_work = 0;//最多两个set记录他们的size
 
         for (j = 0; j < setnum; j++) {
             if (sets[j] == NULL) continue;
@@ -981,10 +1042,12 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
         algo_one_work /= 2;
         diff_algo = (algo_one_work <= algo_two_work) ? 1 : 2;
 
-        if (diff_algo == 1 && setnum > 1) {
+        if (diff_algo == 1 && setnum > 1) {//如果第二个set的长度超过第一个set长度的一半
             /* With algorithm 1 it is better to order the sets to subtract
              * by decreasing size, so that we are more likely to find
              * duplicated elements ASAP. */
+            //c语言内部的qsort快排 
+            //todo 没理解
             qsort(sets+1,setnum-1,sizeof(robj*),
                 qsortCompareSetsByRevCardinality);
         }
@@ -993,22 +1056,23 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
     /* We need a temp set object to store our union. If the dstkey
      * is not NULL (that is, we are inside an SUNIONSTORE operation) then
      * this set object will be the resulting object to set into the target key*/
-    dstset = createIntsetObject();
+    dstset = createIntsetObject();//创建一个新的intset
 
-    if (op == SET_OP_UNION) {
+    if (op == SET_OP_UNION) {//合并
         /* Union is trivial, just add every element of every set to the
          * temporary set. */
         for (j = 0; j < setnum; j++) {
             if (!sets[j]) continue; /* non existing keys are like empty sets */
 
-            si = setTypeInitIterator(sets[j]);
-            while((ele = setTypeNextObject(si)) != NULL) {
+            si = setTypeInitIterator(sets[j]);//获取迭代器
+            while((ele = setTypeNextObject(si)) != NULL) {//将数据加入intset，可能会被转换为dict
                 if (setTypeAdd(dstset,ele)) cardinality++;
                 sdsfree(ele);
             }
-            setTypeReleaseIterator(si);
+            setTypeReleaseIterator(si);//释放迭代器
         }
-    } else if (op == SET_OP_DIFF && sets[0] && diff_algo == 1) {
+    } else if (op == SET_OP_DIFF && sets[0] && diff_algo == 1) {//对已经qsort之后的set做处理
+        //第二个set的元素个数超过第一个set的一半
         /* DIFF Algorithm 1:
          *
          * We perform the diff by iterating all the elements of the first set,
@@ -1017,22 +1081,24 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
          *
          * This way we perform at max N*M operations, where N is the size of
          * the first set, and M the number of sets. */
+        //下面代码的作用是将set[0]中独有的元素放到dstset中
         si = setTypeInitIterator(sets[0]);
         while((ele = setTypeNextObject(si)) != NULL) {
-            for (j = 1; j < setnum; j++) {
+            for (j = 1; j < setnum; j++) {//查找set[0]中的元素在后面的set中是否存在
                 if (!sets[j]) continue; /* no key is an empty set. */
                 if (sets[j] == sets[0]) break; /* same set! */
                 if (setTypeIsMember(sets[j],ele)) break;
             }
-            if (j == setnum) {
+            if (j == setnum) {//如果找到了最后一个set代表元素只在set[0]存在
                 /* There is no other set with this element. Add it. */
-                setTypeAdd(dstset,ele);
+                setTypeAdd(dstset,ele);//将数据加到intset
                 cardinality++;
             }
             sdsfree(ele);
         }
         setTypeReleaseIterator(si);
-    } else if (op == SET_OP_DIFF && sets[0] && diff_algo == 2) {
+    } else if (op == SET_OP_DIFF && sets[0] && diff_algo == 2) {//
+        //第二个set的元素个数没有第一个set的一半
         /* DIFF Algorithm 2:
          *
          * Add all the elements of the first set to the auxiliary set.
@@ -1040,6 +1106,7 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
          *
          * This is O(N) where N is the sum of all the elements in every
          * set. */
+        //下面代码的意思就是将set[0]中其他set也有的元素删除并将数据放到dstset
         for (j = 0; j < setnum; j++) {
             if (!sets[j]) continue; /* non existing keys are like empty sets */
 
@@ -1056,32 +1123,34 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
 
             /* Exit if result set is empty as any additional removal
              * of elements will have no effect. */
+            //代表数据被删除干净
             if (cardinality == 0) break;
         }
     }
 
     /* Output the content of the resulting set, if not in STORE mode */
-    if (!dstkey) {
-        addReplySetLen(c,cardinality);
+    if (!dstkey) {//如果没有需要写入的key
+        addReplySetLen(c,cardinality);//返回新key写入的元素个数
         si = setTypeInitIterator(dstset);
         while((ele = setTypeNextObject(si)) != NULL) {
             addReplyBulkCBuffer(c,ele,sdslen(ele));
             sdsfree(ele);
         }
         setTypeReleaseIterator(si);
+        //删除元素或者取消引用
         server.lazyfree_lazy_server_del ? freeObjAsync(dstset) :
                                           decrRefCount(dstset);
-    } else {
+    } else {//如果需要写入新的key
         /* If we have a target key where to store the resulting set
          * create this key with the result set inside */
-        int deleted = dbDelete(c->db,dstkey);
-        if (setTypeSize(dstset) > 0) {
-            dbAdd(c->db,dstkey,dstset);
+        int deleted = dbDelete(c->db,dstkey);//先删除这个db原有的key
+        if (setTypeSize(dstset) > 0) {//有元素才做操作
+            dbAdd(c->db,dstkey,dstset);//加新的key的元素
             addReplyLongLong(c,setTypeSize(dstset));
             notifyKeyspaceEvent(NOTIFY_SET,
                 op == SET_OP_UNION ? "sunionstore" : "sdiffstore",
                 dstkey,c->db->id);
-        } else {
+        } else {//没有元素，取消引用就好
             decrRefCount(dstset);
             addReply(c,shared.czero);
             if (deleted)
@@ -1091,7 +1160,7 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
         signalModifiedKey(c,c->db,dstkey);
         server.dirty++;
     }
-    zfree(sets);
+    zfree(sets);//释放临时变量
 }
 
 void sunionCommand(client *c) {

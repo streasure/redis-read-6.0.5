@@ -1519,11 +1519,11 @@ typedef struct {
 } listTypeEntry;
 
 /* Structure to hold set iteration abstraction. */
-typedef struct {
+typedef struct {//set的迭代器的结构 set有intset和dict
     robj *subject;
-    int encoding;
+    int encoding;//subject->encoding intset/dict
     int ii; /* intset iterator */
-    dictIterator *di;
+    dictIterator *di;//dict iterator
 } setTypeIterator;
 
 /* Structure to hold hash iteration abstraction. Note that iteration over
@@ -2285,25 +2285,25 @@ void lrangeCommand(client *c);
 void ltrimCommand(client *c);
 void typeCommand(client *c);
 void lsetCommand(client *c);
-void saddCommand(client *c);
-void sremCommand(client *c);
-void smoveCommand(client *c);
-void sismemberCommand(client *c);
-void scardCommand(client *c);
-void spopCommand(client *c);
-void srandmemberCommand(client *c);
-void sinterCommand(client *c);
-void sinterstoreCommand(client *c);
-void sunionCommand(client *c);
-void sunionstoreCommand(client *c);
-void sdiffCommand(client *c);
-void sdiffstoreCommand(client *c);
-void sscanCommand(client *c);
-void syncCommand(client *c);
-void flushdbCommand(client *c);
-void flushallCommand(client *c);
-void sortCommand(client *c);
-void lremCommand(client *c);
+void saddCommand(client *c);//SADD key member [member …]
+void sremCommand(client *c);//SREM key member [member …]
+void smoveCommand(client *c);//SMOVE source destination member
+void sismemberCommand(client *c);//SISMEMBER key member
+void scardCommand(client *c);//SCARD key
+void spopCommand(client *c);//SPOP key
+void srandmemberCommand(client *c);//
+void sinterCommand(client *c);//
+void sinterstoreCommand(client *c);//
+void sunionCommand(client *c);//
+void sunionstoreCommand(client *c);//
+void sdiffCommand(client *c);//
+void sdiffstoreCommand(client *c);//
+void sscanCommand(client *c);//
+void syncCommand(client *c);//
+void flushdbCommand(client *c);//flushdb xx
+void flushallCommand(client *c);//flushall
+void sortCommand(client *c);//
+void lremCommand(client *c);//
 void rpoplpushCommand(client *c);
 void infoCommand(client *c);
 void mgetCommand(client *c);

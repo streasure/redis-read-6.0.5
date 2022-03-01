@@ -74,3 +74,24 @@ int main () {
   printf("i = %lu, a = %s\n", i, a);    // 输出：i = 12, a = 00000001
   return 0;
 }
+
+# qsort
+函数声明
+     void qsort(void *base, size_t nitems, size_t size, int (*compar)(const void *, const void*))
+参数
+     base-- 指向要排序的数组的第一个元素的指针。
+     nitems-- 由 base 指向的数组中元素的个数。
+     size-- 数组中每个元素的大小，以字节为单位。
+     compar-- 用来比较两个元素的函数，即函数指针（回调函数）
+回调函数：
+     回调函数就是一个通过函数指针调用的函数。如果把函数的指针（地址）作为参数传递给另一个函数，当这个指针被用来调用其所指向的函数时，就说这是回调函数。 [2] 
+compar参数
+     compar参数指向一个比较两个元素的函数。比较函数的原型应该像下面这样。注意两个形参必须是const void *型，同时在调用compar 函数（compar实质为函数指针，这里称它所指向的函数也为compar）时，传入的实参也必须转换成const void *型。在compar函数内部会将const void *型转换成实际类型。
+     int compar(const void *p1, const void *p2);
+     如果compar返回值小于0（< 0），那么p1所指向元素会被排在p2所指向元素的左面；
+     如果compar返回值等于0（= 0），那么p1所指向元素与p2所指向元素的顺序不确定；
+     如果compar返回值大于0（> 0），那么p1所指向元素会被排在p2所指向元素的右面。 [2] 
+功 能
+     使用排序例程进行排序。
+说明
+     该函数不返回任何值。

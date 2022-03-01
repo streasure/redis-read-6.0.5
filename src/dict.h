@@ -68,9 +68,9 @@ typedef struct dictType {
  * implement incremental rehashing, for the old to the new table. */
 typedef struct dictht {
     dictEntry **table;
-    unsigned long size;
-    unsigned long sizemask;
-    unsigned long used;
+    unsigned long size;//实际占用大小
+    unsigned long sizemask;//size-1
+    unsigned long used;//使用大小
 } dictht;
 
 typedef struct dict {

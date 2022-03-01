@@ -1415,6 +1415,7 @@ dictType replScriptCacheDictType = {
     NULL                        /* val destructor */
 };
 
+//如果使用率小于10%
 int htNeedsResize(dict *dict) {
     long long size, used;
 

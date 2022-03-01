@@ -248,6 +248,7 @@ robj *createZiplistObject(void) {
     return o;
 }
 
+//创建dict类型的set
 robj *createSetObject(void) {
     dict *d = dictCreate(&setDictType,NULL);
     robj *o = createObject(OBJ_SET,d);
@@ -255,7 +256,7 @@ robj *createSetObject(void) {
     return o;
 }
 
-//创建intset
+//创建intset类型的set
 robj *createIntsetObject(void) {
     intset *is = intsetNew();
     robj *o = createObject(OBJ_SET,is);
@@ -427,6 +428,7 @@ robj *resetRefCount(robj *obj) {
     return obj;
 }
 
+//判断类型是否相同，相同返回0，不相同返回1
 int checkType(client *c, robj *o, int type) {
     if (o->type != type) {
         addReply(c,shared.wrongtypeerr);
