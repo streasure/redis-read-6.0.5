@@ -40,8 +40,9 @@ struct rtree_ctx_cache_elm_s {
 typedef struct rtree_ctx_s rtree_ctx_t;
 struct rtree_ctx_s {
 	/* Direct mapped cache. */
+	//cache line级别的内存
 	rtree_ctx_cache_elm_t	cache[RTREE_CTX_NCACHE];
-	/* L2 LRU cache. */
+	/* L2 LRU（least recently used） cache. 最近最少使用内存*/
 	rtree_ctx_cache_elm_t	l2_cache[RTREE_CTX_NCACHE_L2];
 };
 

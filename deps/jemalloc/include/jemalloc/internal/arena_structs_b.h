@@ -88,6 +88,8 @@ struct arena_s {
 	 *
 	 * Synchronization: atomic.
 	 */
+	//当前arena绑定的线程数，0表示应用程序分配 1表示内部元数据分配
+	//原子操作数据标识
 	atomic_u_t		nthreads[2];
 
 	/*
@@ -95,6 +97,7 @@ struct arena_s {
 	 * updating the current CPU id, track the most recent thread accessing
 	 * this arena, and only read CPU if there is a mismatch.
 	 */
+	//当每个cpu对应的arena启用时，为了分摊当前cpu的读写成本，会跟踪这个arena最新的常用thread并且在未命中的情况下对cpu进行只读操作
 	tsdn_t		*last_thd;
 
 	/* Synchronization: internal. */
@@ -107,6 +110,7 @@ struct arena_s {
 	 *
 	 * Synchronization: tcache_ql_mtx.
 	 */
+	//当前arena下现存的threads中存在的tcaches和cache_bin_array_descriptor的list
 	ql_head(tcache_t)			tcache_ql;
 	ql_head(cache_bin_array_descriptor_t)	cache_bin_array_descriptor_ql;
 	malloc_mutex_t				tcache_ql_mtx;

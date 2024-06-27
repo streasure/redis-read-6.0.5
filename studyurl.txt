@@ -10,3 +10,8 @@ https://blog.csdn.net/yuyixinye/category_2635077.html?spm=1001.2014.3001.5482
 Redis源码解析：25集群(一)握手、心跳消息以及下线检测
 https://blog.csdn.net/weixin_30485799/article/details/94981455?spm=1001.2101.3001.6650.1&utm_medium=distribute.pc_relevant.none-task-blog-2%7Edefault%7EBlogCommendFromBaidu%7Edefault-1.essearch_pc_relevant&depth_1-utm_source=distribute.pc_relevant.none-task-blog-2%7Edefault%7EBlogCommendFromBaidu%7Edefault-1.essearch_pc_relevant
 
+jemalloc源码解析
+//很老的文章看思想就行
+https://youjiali1995.github.io/allocator/jemalloc/
+//比较新
+https://blog.csdn.net/liuxunwei1/article/details/138155256

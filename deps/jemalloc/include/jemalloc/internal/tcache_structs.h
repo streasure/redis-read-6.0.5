@@ -10,6 +10,7 @@ struct tcache_s {
 	/*
 	 * To minimize our cache-footprint, we put the frequently accessed data
 	 * together at the start of this struct.
+	 * 为了最大限度的提高缓存命中，会将频繁访问的数据放在这个struct的开头
 	 */
 
 	/* Cleared after arena_prof_accum(). */
@@ -47,6 +48,7 @@ struct tcache_s {
 	 * struct, since some of them might not get used.  This might end up
 	 * letting us avoid touching an extra page if we don't have to.
 	 */
+	//应该是为了防止内存上下切页做的处理
 	cache_bin_t	bins_large[NSIZES-NBINS];
 };
 

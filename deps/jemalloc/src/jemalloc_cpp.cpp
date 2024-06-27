@@ -39,6 +39,7 @@ void	operator delete(void *ptr, std::size_t size) noexcept;
 void	operator delete[](void *ptr, std::size_t size) noexcept;
 #endif
 
+//out of memory handle
 JEMALLOC_NOINLINE
 static void *
 handleOOM(std::size_t size, bool nothrow) {

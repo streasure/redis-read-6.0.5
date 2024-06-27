@@ -727,7 +727,7 @@ unsigned char *ziplistNew(void) {
 }
 
 /* Resize the ziplist. */
-//重置ziplist
+//重新设置ziplist的数据占用大小，只修改总长度和尾部节点的值
 unsigned char *ziplistResize(unsigned char *zl, unsigned int len) {
     zl = zrealloc(zl,len);
     ZIPLIST_BYTES(zl) = intrev32ifbe(len);//新的长度赋值到头部信息
@@ -915,7 +915,7 @@ unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsigned int
 //这个函数的作用是在zl的p指针位置插入slen长度的s
 //*******************第一次阅读请不要看ziplist有数据的情况********************
 unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen) {
-    //获取这个zl当前元素的长度，这个长度存在头部信息的第一个32位数据中
+    //获取这个zl占用的总空间大小，这个数值存在头部信息的第一个32位数据中
     size_t curlen = intrev32ifbe(ZIPLIST_BYTES(zl)), reqlen;
     //prevlensize代表ziplist除去head之后的字节数
     //prevlen在prevlensize为1是代表255，在prevlensize为5是代表后四个字节存储的内容的反转后的值

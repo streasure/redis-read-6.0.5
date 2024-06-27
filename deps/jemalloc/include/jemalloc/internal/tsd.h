@@ -254,13 +254,26 @@ tsd_fast(tsd_t *tsd) {
 
 JEMALLOC_ALWAYS_INLINE tsd_t *
 tsd_fetch_impl(bool init, bool minimal) {
+	/*
+		在jemalloc内存分配库中，tsd_get函数的作用是获取当前线程的线程特定数据（Thread-Specific Data），
+	这是一个对线程本地存储的抽象。在多线程程序中，每个线程可能需要独立的内存管理数据或配置，
+	tsd_get正是用于获取每个线程关联的特定数据结构，这个数据结构通常包含了线程局部的分配统计信息、arena选择策略信息等。
+		tsd是“Thread Specific Data”的缩写。jemalloc通过tsd管理每个线程的分配上下文，确保线程安全的同时，
+	也能提供高效的内存分配策略。tsd_get函数内部会处理线程初次调用时的初始化逻辑，确保每个线程都有自己的数据副本，
+	并且能够快速访问到。
+		具体到代码层面，tsd_get函数的实现会依赖于编译时的线程模型配置，比如POSIX线程（pthread）或其他平台特定的线程实现。
+	它通常会使用线程本地存储（TLS, Thread Local Storage）技术来实现每个线程的数据隔离。
+		需要注意的是，直接使用jemalloc的内部函数（如tsd_get）通常不是应用程序直接操作的部分，
+	除非你是在对jemalloc进行定制或扩展。大多数情况下，jemalloc的公共API（如内存分配和释放函数）已经封装了这些内部细节，
+	使得用户可以在不直接操作tsd的情况下使用jemalloc进行内存管理。
+	*/
 	tsd_t *tsd = tsd_get(init);
 
 	if (!init && tsd_get_allocates() && tsd == NULL) {
 		return NULL;
 	}
 	assert(tsd != NULL);
-
+	//判断从热内存还是冷内存获取
 	if (unlikely(tsd->state != tsd_state_nominal)) {
 		return tsd_fetch_slow(tsd, minimal);
 	}

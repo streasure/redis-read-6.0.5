@@ -1505,6 +1505,7 @@ malloc_init_hard(void) {
 #endif
 	malloc_mutex_lock(TSDN_NULL, &init_lock);
 
+//类似lamba函数，编译阶段会替换
 #define UNLOCK_RETURN(tsdn, ret, reentrancy)		\
 	malloc_init_hard_cleanup(tsdn, reentrancy);	\
 	return ret;
@@ -2283,43 +2284,69 @@ isfree(tsd_t *tsd, void *ptr, size_t usize, tcache_t *tcache, bool slow_path) {
 	}
 }
 
+/*
+JEMALLOC_EXPORT, JEMALLOC_ALLOCATOR, 和 JEMALLOC_RESTRICT_RETURN 
+是Jemalloc内存分配库中使用的宏，它们各自有特定的目的和作用。
+这些宏是预处理器指令，用于在编译时控制代码的编译属性或行为。
+下面是这些宏的基本解释：
+	1. JEMALLOC_EXPORT: 这个宏通常用于导出函数或符号，以便它们可以被外部库或应用程序使用。
+		在不同的编译环境下，它的具体实现可能不同。
+		例如，在Windows系统中，它可能被定义为__declspec(dllexport)来指示一个函数或变量需要被导出；
+		在Unix-like系统（如Linux或macOS）中，它可能不需要特殊处理，因为动态库默认导出所有符号，或者使用.visibility属性来控制。
+		总之，它的目的是控制函数或变量的链接可见性。
+	2. JEMALLOC_ALLOCATOR: 这个宏用来标记一个函数是内存分配相关函数。
+		在Jemalloc的上下文中，它可能用来实现特定的内存管理策略，比如统计分配信息、性能监控或是确保内存分配符合特定的对齐要求。
+		这个标记有助于库内部识别哪些函数是用来分配或释放内存的，从而可能会影响到内存管理策略的选择或优化。
+	3. JEMALLOC_RESTRICT_RETURN: restrict关键字在C语言中用于指明指针是访问某个对象的唯一且初始的方式，
+		这可以帮助编译器做出更高效的优化。JEMALLOC_RESTRICT_RETURN宏很可能用于指定函数返回的指针是restrict类型的，
+		意味着返回的内存区域不会通过其他不受控的指针间接访问，从而允许编译器做更多的优化，比如消除不必要的内存读写屏障。
+		这个宏帮助强调了函数返回的指针的唯一性，提高了程序的性能。
+这些宏的具体实现细节依赖于Jemalloc库的源代码和配置，它们是Jemalloc为了实现高效、可控的内存管理而采取的一部分编译时策略。
+*/
 JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ALLOC_SIZE(2)
 je_realloc(void *ptr, size_t size) {
 	void *ret;
 	tsdn_t *tsdn JEMALLOC_CC_SILENCE_INIT(NULL);
+	//标识大内存还是小内存
 	size_t usize JEMALLOC_CC_SILENCE_INIT(0);
 	size_t old_usize = 0;
 
 	LOG("core.realloc.entry", "ptr: %p, size: %zu\n", ptr, size);
-
+	//unlikely表示条件很少出现，size一般不为0
 	if (unlikely(size == 0)) {
-		if (ptr != NULL) {
+		if (ptr != NULL) {//如果为0代表释放ptr
 			/* realloc(ptr, 0) is equivalent to free(ptr). */
 			UTRACE(ptr, 0, 0);
-			tcache_t *tcache;
+			tcache_t *tcache;//内存相关处理的结构
+			//获取内存处理单位，使用热内存还是冷内存
 			tsd_t *tsd = tsd_fetch();
+			//获取处理这个realloc的tcache对象
 			if (tsd_reentrancy_level_get(tsd) == 0) {
 				tcache = tcache_get(tsd);
 			} else {
 				tcache = NULL;
 			}
+			//释放内存
 			ifree(tsd, ptr, tcache, true);
 
 			LOG("core.realloc.exit", "result: %p", NULL);
 			return NULL;
 		}
-		size = 1;
+		size = 1;//至少也要返回size为1长度的空间
 	}
-
+	//代表ptr一般不会为null
 	if (likely(ptr != NULL)) {
+		//判断jemalloc处理器状态
 		assert(malloc_initialized() || IS_INITIALIZER);
+		//获取tcache处理单位，tcache/tcache_slow
 		tsd_t *tsd = tsd_fetch();
-
+		//判断tsd是否处于可用状态，未被其他对象lock
 		check_entry_exit_locking(tsd_tsdn(tsd));
 
 		alloc_ctx_t alloc_ctx;
+		//获取tsd上的rtree对象
 		rtree_ctx_t *rtree_ctx = tsd_rtree_ctx(tsd);
 		rtree_szind_slab_read(tsd_tsdn(tsd), &extents_rtree, rtree_ctx,
 		    (uintptr_t)ptr, true, &alloc_ctx.szind, &alloc_ctx.slab);
@@ -2335,6 +2362,7 @@ je_realloc(void *ptr, size_t size) {
 			if (config_stats) {
 				usize = sz_s2u(size);
 			}
+			//获取新的内存空间
 			ret = iralloc(tsd, ptr, old_usize, size, 0, false);
 		}
 		tsdn = tsd_tsdn(tsd);
@@ -2344,7 +2372,7 @@ je_realloc(void *ptr, size_t size) {
 		LOG("core.realloc.exit", "result: %p", ret);
 		return ret;
 	}
-
+	//内存分配失败
 	if (unlikely(ret == NULL)) {
 		if (config_xmalloc && unlikely(opt_xmalloc)) {
 			malloc_write("<jemalloc>: Error in realloc(): "
@@ -2353,6 +2381,7 @@ je_realloc(void *ptr, size_t size) {
 		}
 		set_errno(ENOMEM);
 	}
+	//jemalloc数据修改
 	if (config_stats && likely(ret != NULL)) {
 		tsd_t *tsd;
 
@@ -2362,6 +2391,7 @@ je_realloc(void *ptr, size_t size) {
 		*tsd_thread_deallocatedp_get(tsd) += old_usize;
 	}
 	UTRACE(ptr, size, ret);
+	//tsdn状态正常退出
 	check_entry_exit_locking(tsdn);
 
 	LOG("core.realloc.exit", "result: %p", ret);
@@ -3177,6 +3207,24 @@ je_malloc_usable_size(JEMALLOC_USABLE_SIZE_CONST void *ptr) {
  * to trigger the deadlock described above, but doing so would involve forking
  * via a library constructor that runs before jemalloc's runs.
  */
+/*
+	这段代码是C语言中用于指定一个全局构造函数的示例，它利用了预处理器宏和特定于编译器的属性来控制函数的行为。
+这里是针对jemalloc内存分配库的一个构造函数示例。让我们逐行解析这段代码：
+	1. #ifndef JEMALLOC_JET: 这是一个预处理器指令，用于检查是否存在JEMALLOC_JET宏定义。如果不存在（即未定义），则下面的代码块将被编译器处理。
+	2. JEMALLOC_ATTR(constructor): 这是一个编译器特定的属性（Attribute），用于告诉编译器将紧随其后的函数视为构造函数。
+		具体到jemalloc，这个宏可能被定义为指示编译器在程序启动时自动调用该函数，类似于C++中的全局构造函数。
+		不同编译器可能有不同的方式来实现这样的构造函数属性，比如GCC使用__attribute__((constructor))。
+	3. static void jemalloc_constructor(void): 这是定义的构造函数本身，它不接受任何参数，并且返回void。
+		由于被声明为static，它的作用域限制在定义它的文件内，但这里的static更主要的目的是限制链接可见性，而不是作用域，
+		因为在构造函数的上下文中，通常希望它在全局范围内运行一次。
+	4. malloc_init();: 函数体内的这行代码调用了malloc_init函数，该函数很可能是jemalloc库内部用于初始化内存管理子系统的函数。
+		这一步对于确保jemalloc能在程序启动时正确配置其内部状态至关重要，比如初始化内存池、设置适当的内存分配策略等。
+	5. #endif: 这对应前面的#ifndef，结束条件编译块。
+	因此，jemalloc_constructor函数的作用是在程序启动之初自动执行jemalloc的初始化逻辑。
+这个初始化过程会在主函数（如main()）执行之前完成，确保了在程序的任何部分开始分配内存之前，
+jemalloc就已经准备就绪。这种机制对于库的初始化非常有用，特别是当库需要在程序的其他部分使用之前进行一些一次性配置或设置时。
+*/
+//类似构造函数使用static全局初始化一次
 #ifndef JEMALLOC_JET
 JEMALLOC_ATTR(constructor)
 static void
