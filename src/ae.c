@@ -50,10 +50,10 @@
 #include "ae_evport.c"
 #else
     #ifdef HAVE_EPOLL
-    #include "ae_epoll.c"
+    #include "ae_epoll.c"//epoll是linux特有的
     #else
         #ifdef HAVE_KQUEUE
-        #include "ae_kqueue.c"
+        #include "ae_kqueue.c"//mac，openbsd，freebsd等类bsd系统有和epoll比肩的kqueue机制
         #else
         #include "ae_select.c"
         #endif

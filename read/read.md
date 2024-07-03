@@ -95,3 +95,92 @@ compar参数
      使用排序例程进行排序。
 说明
      该函数不返回任何值。
+
+# strncmp
+int strncmp(const char *str1, const char *str2, size_t n) 把 str1 和 str2 进行比较，最多比较前 n 个字符
+该函数返回值如下：
+如果返回值 < 0，则表示 str1 小于 str2。
+如果返回值 > 0，则表示 str1 大于 str2。
+如果返回值 = 0，则表示 str1 等于 str2。
+
+# strcmp
+int strcmp(const char *str1, const char *str2)
+参数
+str1 -- 要进行比较的第一个字符串。
+str2 -- 要进行比较的第二个字符串。
+返回值
+如果返回值小于 0，则表示 str1 小于 str2。
+如果返回值大于 0，则表示 str1 大于 str2。
+如果返回值等于 0，则表示 str1 等于 str2。
+
+# strcasecmp
+定义函数：
+int strcasecmp (const char *s1, const char *s2);
+函数说明：
+strcasecmp()用来比较参数s1 和s2 字符串，比较时会自动忽略大小写的差异。
+返回值：
+若参数s1 和s2 字符串相同则返回0。
+s1 长度大于s2 长度则返回大于0 的值，
+s1 长度若小于s2 长度则返回小于0 的值。
+
+# fgets
+char *fgets(char *str, int n, FILE *stream) 从指定的流 stream 读取一行，并把它存储在 str 所指向的字符串内。当读取 (n-1) 个字符时，或者读取到换行符时，或者到达文件末尾时，它会停止，具体视情况而定
+
+# strtol
+C 库函数 long int strtol(const char *str, char **endptr, int base) 把参数 str 所指向的字符串根据给定的 base 转换为一个长整数（类型为 long int 型），base 必须介于 2 和 36（包含）之间，或者是特殊值 0。
+
+str -- 要转换为长整数的字符串。
+endptr -- 对类型为 char* 的对象的引用，其值由函数设置为 str 中数值后的下一个字符。
+base -- 基数，必须介于 2 和 36（包含）之间，或者是特殊值 0。如果 base 为 0，则会根据字符串的前缀来判断进制：如果字符串以 '0x' 或 '0X' 开头，则将其视为十六进制；如果字符串以 '0' 开头，则将其视为八进制；否则将其视为十进制。
+
+# ftell/ftello(2G以上大文件)
+C 库函数 long int ftell(FILE *stream) 返回给定流 stream 的当前文件位置。 好像只是用于获取文件大小，看代码用法感觉是获取文件已偏移的位置大小
+参数
+stream -- 这是指向 FILE 对象的指针，该 FILE 对象标识了流。
+返回值
+该函数返回位置标识符的当前值。如果发生错误，则返回 -1L，全局变量 errno 被设置为一个正值。
+
+# fread
+用完指针会偏移
+从给定流 stream 读取size*nmemb字节的数据到 ptr 所指向的数组中
+size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
+参数
+ptr -- 这是指向带有最小尺寸 size*nmemb 字节的内存块的指针。
+size -- 这是要读取的每个元素的大小，以字节为单位。
+nmemb -- 这是元素的个数，每个元素的大小为 size 字节。
+stream -- 这是指向 FILE 对象的指针，该 FILE 对象指定了一个输入流。
+返回值
+成功读取的元素总数会以 size_t 对象返回，size_t 对象是一个整型数据类型。如果总数与 nmemb 参数不同，则可能发生了一个错误或者到达了文件末尾。
+
+# feof
+声明
+int feof(FILE *stream)
+参数
+stream -- 这是指向 FILE 对象的指针，该 FILE 对象标识了流。
+返回值
+当设置了与流关联的文件结束标识符时，该函数返回一个非零值，否则返回零。
+
+# fileno
+int fileno(FILE *stream);
+将文件流指针转换为文件描述符
+
+# rewind
+设置文件位置为给定流 stream 的文件的开头。
+声明
+void rewind(FILE *stream)
+参数
+stream -- 这是指向 FILE 对象的指针，该 FILE 对象标识了流。
+返回值
+该函数不返回任何值。
+
+# fturncate
+定义函数 int ftruncate(int fd,off_t length);
+ftruncate()会将参数fd指定的文件大小改为参数length指定的大小。
+参数
+fd为已打开的文件描述词，而且必须是以写入模式打开的文件。
+如果原来的文件大小比参数length大，则超过的部分会被删去。
+返回值
+执行成功则返回0，失败返回-1，错误原因存于errno。
+错误代码
+EBADF 参数fd文件描述词为无效的或该文件已关闭。
+EINVAL 参数fd 为一socket 并非文件，或是该文件并非以写入模式打开。

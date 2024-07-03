@@ -15,3 +15,4 @@ jemalloc源码解析
 https://youjiali1995.github.io/allocator/jemalloc/
 //比较新
 https://blog.csdn.net/liuxunwei1/article/details/138155256
+https://blog.csdn.net/mw_nice/article/details/84969925

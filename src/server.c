@@ -2779,6 +2779,7 @@ void initServer(void) {
     //初始化共享变量
     createSharedObjects();
     adjustOpenFilesLimit();
+    //创建网络管理模块
     server.el = aeCreateEventLoop(server.maxclients+CONFIG_FDSET_INCR);
     if (server.el == NULL) {
         serverLog(LL_WARNING,

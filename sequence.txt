@@ -89,3 +89,4 @@ Redis Sentinel sentinel.c
 jemalloc.c + jemalloc_cpp.cpp 这个版本的redis使用的是jemalloc库处理的内存管理，重点研究
 函数入口：zrealloc
 具体理解可以在read/jemalloc.md中自己添加
+

@@ -28,9 +28,24 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/*
+linux环境特有的epoll处理机制
+
+*/
 
 #include <sys/epoll.h>
-
+/*
+    typedef union epoll_data {
+        void *ptr;          //指定与fd相关的用户数据
+        int fd;             //指定事件所从属的目标文件描述符
+        __uint32_t u32;
+        __uint64_t u64;
+    } epoll_data_t;
+    struct epoll_event {
+        __uint32_t events; /* Epoll events */
+        epoll_data_t data; /* User data variable */
+    };
+*/
 typedef struct aeApiState {
     int epfd;
     struct epoll_event *events;
