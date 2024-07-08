@@ -480,6 +480,18 @@ static int _anetTcpServer(char *err, int port, char *bindaddr, int af, int backl
 {
     int s = -1, rv;
     char _port[6];  /* strlen("65535") */
+    /*
+    struct addrinfo{
+        int ai_flags; 
+        int ai_family;
+        int ai_socktype;
+        int ai_protocol;
+        socklen_t ai_addrlen;
+        char *ai_canonname;
+        struct sockaddr *ai_addr;
+        struct addrinfo *ai_next;
+    };
+    */
     struct addrinfo hints, *servinfo, *p;
 
     snprintf(_port,6,"%d",port);
@@ -498,6 +510,7 @@ static int _anetTcpServer(char *err, int port, char *bindaddr, int af, int backl
 
         if (af == AF_INET6 && anetV6Only(err,s) == ANET_ERR) goto error;
         if (anetSetReuseAddr(err,s) == ANET_ERR) goto error;
+        //listen库函数的调用
         if (anetListen(err,s,p->ai_addr,p->ai_addrlen,backlog) == ANET_ERR) s = ANET_ERR;
         goto end;
     }
@@ -559,6 +572,7 @@ static int anetGenericAccept(char *err, int s, struct sockaddr *sa, socklen_t *l
     return fd;
 }
 
+//内部封装了accept接口
 int anetTcpAccept(char *err, int s, char *ip, size_t ip_len, int *port) {
     int fd;
     struct sockaddr_storage sa;

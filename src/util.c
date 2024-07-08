@@ -628,6 +628,7 @@ int ld2string(char *buf, size_t len, long double value, ld2string_mode mode) {
  * stream. However if /dev/urandom is not available, a weaker seed is used.
  *
  * This function is not thread safe, since the state is global. */
+//生成一组len长度的随机字节数据，但不是线程安全的
 void getRandomBytes(unsigned char *p, size_t len) {
     /* Global state. */
     static int seed_initialized = 0;
@@ -639,6 +640,7 @@ void getRandomBytes(unsigned char *p, size_t len) {
          * the same seed with a progressive counter. For the goals of this
          * function we just need non-colliding strings, there are no
          * cryptographic security needs. */
+        //随机数的数据取值来源希望是来源于/dev/urandom
         FILE *fp = fopen("/dev/urandom","r");
         if (fp == NULL || fread(seed,sizeof(seed),1,fp) != 1) {
             /* Revert to a weaker seed, and in this case reseed again
@@ -654,7 +656,7 @@ void getRandomBytes(unsigned char *p, size_t len) {
         }
         if (fp) fclose(fp);
     }
-
+    //没理解为啥用上sha256
     while(len) {
         /* This implements SHA256-HMAC. */
         unsigned char digest[SHA256_BLOCK_SIZE];

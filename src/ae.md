@@ -153,6 +153,78 @@ inet_aton函数所在的头文件：<arpa/inet.h>
 inet_aton(const char * IP)就是返回IP对应的网络字节序表示的无符号整数。
 inet_ntoa(in_addr n)就是网络字节序n转化为点分十进制的IP。
 
+# inet_pton,inet_ntop
+// windows下头文件
+#include <ws2tcpip.h>
+// linux下头文件
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+##inet_pton()
+功能：
+    将标准文本表示形式的IPv4或IPv6 Internet网络地址转换为数字二进制形式。
+参数：
+    INT WSAAPI inet_pton(
+        INT   Family,  //地址家族  IPV4使用AF_INET  IPV6使用AF_INET6 
+        PCSTR pszAddrString, //指向以NULL为结尾的字符串指针，该字符串包含要转换为数字的二进制形式的IP地址文本形式。
+        PVOID pAddrBuf//指向存储二进制表达式的缓冲区
+    );
+返回值：
+    1.若无错误发生，则inet_pton()返回1，pAddrBuf参数执行的缓冲区包含按网络字节顺序的二进制数字IP地址。
+    2.若pAddrBuf指向的字符串不是一个有效的IPv4点分十进制字符串或者不是一个有效的IPv6点分十进制字符串，则返回0。否则返回-1。
+    3.可以通过WSAGetLastError()获得错误错误代码。
+案例：（socket编程中的使用方法）
+    sockaddr_in addrServer;
+    inet_pton(AF_INET, "127.0.0.1", &addrServer.sin_addr);
+    addrServer.sin_port = htons(6000);  // 该函数需要添加头文件： #include <winsock.h>
+    addrServer.sin_family = AF_INET;
+
+##inet_ntop()
+功能：将IPv4或IPv6 Internet网络地址转换为 Internet标准格式的字符串。
+参数：
+    PCWSTR WSAAPI InetNtopW(
+        INT        Family,  //地址家族  IPV4使用AF_INET  IPV6使用AF_INET6 
+        const VOID *pAddr,  //指向网络字节中要转换为字符串的IP地址的指针
+        PWSTR      pStringBuf,//指向缓冲区的指针，该缓冲区用于存储IP地址的以NULL终止的字符串表示形式。
+        size_t     StringBufSize//输入时，由pStringBuf参数指向的缓冲区的长度（以字符为单位）
+    );
+举例：（socket中显示连接的IP地址时）
+    char buf[20] = { 0 };
+    inet_ntop(AF_INET, &recvAddr.sin_addr, buf, sizeof(buf));//其中recvAddr为SOCKADDR_IN类型
+    cout << "客户端地址：" << buf << endl;
+返回值：
+    1.若无错误发生，Inet_ntop()函数返回一个指向缓冲区的指针，该缓冲区包含标准格式的IP地址的字符串表示形式。
+    2.否则返回NULL
+    3.获取错误码：WSAGetLastError()
+
+# htonl,htons,ntohl,ntohs
+头文件：
+    #include <arpa/inet.h> 
+htonl()函数
+    函数原型是：uint32_t htonl(uint32_t hostlong)
+    其中,hostlong是主机字节顺序表达的32位数，htonl中的h–host主机地址，to–to,n–net网络，l–unsigned long无符号的长整型(32位的系统是4字节)；
+    函数返回值是一个32位的网络字节顺序；
+    函数的作用是将一个32位数从主机字节顺序转换成网络字节顺序。
+htons()函数
+    函数原型是：uint16_t htons(uint16_t hostlong)
+    其中,hostlong是主机字节顺序表达的16位数，htons中的h–host主机地址，to–to,n–net网络，s–signed long无符号的短整型(32位的系统是2字节)；
+    函数返回值是一个16位的网络字节顺序；
+    函数的作用是将一个16位数从主机字节顺序转换成网络字节顺序，简单的说就是把一个16位数高低位呼唤。
+ntohs()函数
+    函数原型是：uint16_t ntohs(uint16_t hostlong)
+    其中,hostlong是网络字节顺序表达的16位数，ntohs中的,n–net网络，to–toh–host主机地址，s–signed long有符号的短整型(32位的系统是2字节)；
+    函数返回值是一个16位的主机字节顺序；
+    函数的作用是将一个16位数由网络字节顺序转换为主机字节顺序，简单的说就是把一个16位数高低位互换。
+ntohl()函数
+    函数原型是：uint32_t ntohs(uint32_t hostlong)
+    其中,hostlong是网络字节顺序表达的32位数，ntohs中的,n–net网络，to–toh–host主机地址，s–unsigned long无符号的短整型(32位的系统是4字节)；
+    函数返回值是一个32位的主机字节顺序；
+    函数的作用是将一个32位数由网络字节顺序转换为主机字节顺序。
+这些函数存在的意义
+    说到这部分需要引入字节存放的两个概念一个是“大端顺序”，一个是“小端顺序”。俗称“小尾顺序”、“大尾顺序”。
+    简单的说就是对应数据的高字节存放在低地址，低字节存放在高地址上就是大端顺序，对应数据的高字节存放在高地址，低字节存放在低地址上就是小端顺序。
+
 # bind
 int bind(int sockfd, const struct sockaddr *addr,socklen_t addrlen);
     参数 sockfd ，需要绑定的socket。

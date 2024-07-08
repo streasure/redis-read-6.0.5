@@ -58,6 +58,7 @@ struct evictionPoolEntry {
     int dbid;                   /* Key DB number. */
 };
 
+//LRU淘汰使用时间最旧的数据。
 static struct evictionPoolEntry *EvictionPoolLRU;
 
 /* ----------------------------------------------------------------------------

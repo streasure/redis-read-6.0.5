@@ -31,6 +31,11 @@
 #include <inttypes.h>
 #include <stdio.h>
 
+/*
+抽象函数指针
+将所有符合uint64_t func(uint64_t, const void *, const uint64_t)函数都可以用crcfn64表示
+将所有符合uint16_t func(uint16_t, const void *, const uint64_t)函数都可以用crcfn16表示
+*/
 typedef uint64_t (*crcfn64)(uint64_t, const void *, const uint64_t);
 typedef uint16_t (*crcfn16)(uint16_t, const void *, const uint64_t);
 

@@ -100,7 +100,7 @@ client *createClient(connection *conn) {
         connSetReadHandler(conn, readQueryFromClient);
         connSetPrivateData(conn, c);
     }
-
+    //默认db编号
     selectDb(c,0);
     uint64_t client_id = ++server.next_client_id;
     c->id = client_id;

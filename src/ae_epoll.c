@@ -47,25 +47,29 @@ linux环境特有的epoll处理机制
     };
 */
 typedef struct aeApiState {
-    int epfd;
+    int epfd;//epoll的文件描述符
     struct epoll_event *events;
 } aeApiState;
 
+//创建epoll的event处理对象
 static int aeApiCreate(aeEventLoop *eventLoop) {
     aeApiState *state = zmalloc(sizeof(aeApiState));
 
     if (!state) return -1;
+    //初始化event数组的长度，setsize就是调用create的时候传进来的值
     state->events = zmalloc(sizeof(struct epoll_event)*eventLoop->setsize);
     if (!state->events) {
         zfree(state);
         return -1;
     }
+    //创建epoll文件句柄
     state->epfd = epoll_create(1024); /* 1024 is just a hint for the kernel */
     if (state->epfd == -1) {
         zfree(state->events);
         zfree(state);
         return -1;
     }
+    //将epoll对象记录在eventloop对象中
     eventLoop->apidata = state;
     return 0;
 }

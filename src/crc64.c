@@ -85,6 +85,7 @@ static inline uint_fast64_t crc_reflect(uint_fast64_t data, size_t data_len) {
  * \param data_len Number of bytes in the \a data buffer.
  * \return         The updated crc value.
  ******************************************************************************/
+//使用新的in_data计算新的crc数值
 uint64_t _crc64(uint_fast64_t crc, const void *in_data, const uint64_t len) {
     const uint8_t *data = in_data;
     unsigned long long bit;
@@ -113,6 +114,14 @@ uint64_t _crc64(uint_fast64_t crc, const void *in_data, const uint64_t len) {
 /******************** END GENERATED PYCRC FUNCTIONS ********************/
 
 /* Initializes the 16KB lookup tables. */
+/*
+可以看这个文章看一下来龙去脉，这个文件上面也有贡献者matt的字段
+https://xie.infoq.cn/article/dc032d3adcc5892fdaa9322b5
+用途
+在跨实例迁移键时添加校验和，（并验证上述校验和）数据校验
+为RDB输出添加一个校验和，用于复制和持久化（是可选项，可通过配置禁用，因为性能低）
+用于内存测试
+*/
 void crc64_init(void) {
     crcspeed64native_init(_crc64, crc64_table);
 }

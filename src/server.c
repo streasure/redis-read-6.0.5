@@ -179,6 +179,7 @@ volatile unsigned long lru_clock; /* Server global current LRU time. */
  *    TYPE, EXPIRE*, PEXPIRE*, TTL, PTTL, ...
  */
 
+//redis所有的操作指令和操作函数的绑定关系
 struct redisCommand redisCommandTable[] = {
     {"module",moduleCommand,-2,
      "admin no-script",
@@ -1107,6 +1108,7 @@ err:
 }
 
 /* Return the UNIX time in microseconds */
+//返回微秒级别的时间戳
 long long ustime(void) {
     struct timeval tv;
     long long ust;
@@ -1764,6 +1766,10 @@ void updateCachedTime(int update_daylight_info) {
     if (update_daylight_info) {
         struct tm tm;
         time_t ut = server.unixtime;
+        /*
+            localtime 是不可重入函数，非线程安全
+            localtime_r 是可重入函数，线程安全
+        */
         localtime_r(&ut,&tm);
         server.daylight_active = tm.tm_isdst;
     }
@@ -2336,6 +2342,7 @@ void initServerConfig(void) {
                                       updated later after loading the config.
                                       This value may be used before the server
                                       is initialized. */
+    //提前进行过tzset，所以保证获取的时间变量为当前环境下适配的
     server.timezone = getTimeZone(); /* Initialized by tzset(). */
     server.configfile = NULL;
     server.executable = NULL;
@@ -2383,6 +2390,7 @@ void initServerConfig(void) {
     appendServerSaveParams(60,10000); /* save after 1 minute and 10000 changes */
 
     /* Replication related */
+    //从库需要记录的内容
     server.masterauth = NULL;
     server.masterhost = NULL;
     server.masterport = 6379;
@@ -2419,7 +2427,9 @@ void initServerConfig(void) {
      * redis.conf using the rename-command directive. */
     server.commands = dictCreate(&commandTableDictType,NULL);
     server.orig_commands = dictCreate(&commandTableDictType,NULL);
+    //将指令注册到server.commands和server.orig_commands中
     populateCommandTable();
+    //单独取出这些指令，估计是常用吧
     server.delCommand = lookupCommandByCString("del");
     server.multiCommand = lookupCommandByCString("multi");
     server.lpushCommand = lookupCommandByCString("lpush");
@@ -2635,6 +2645,12 @@ void checkTcpBacklogSettings(void) {
  * impossible to bind, or no bind addresses were specified in the server
  * configuration but the function is not able to bind * for at least
  * one of the IPv4 or IPv6 protocols. */
+//从server.bindaddr数组中获取到可以被监听的ip和端口
+/*
+port:要被监听的端口
+fds:成功建立监听后文件描述符的存储位置
+count:实际成功建立的连接个数
+*/
 int listenToPort(int port, int *fds, int *count) {
     int j;
 
@@ -2671,7 +2687,7 @@ int listenToPort(int port, int *fds, int *count) {
             /* Exit the loop if we were able to bind * on IPv4 and IPv6,
              * otherwise fds[*count] will be ANET_ERR and we'll print an
              * error and return to the caller with an error. */
-            if (*count + unsupported == 2) break;
+            if (*count + unsupported == 2) break;//只有一个连接并且失败了
         } else if (strchr(server.bindaddr[j],':')) {
             /* Bind IPv6 address. */
             fds[*count] = anetTcp6Server(server.neterr,port,server.bindaddr[j],
@@ -2778,8 +2794,9 @@ void initServer(void) {
     }
     //初始化共享变量
     createSharedObjects();
+    //获取最大的可连接数
     adjustOpenFilesLimit();
-    //创建网络管理模块
+    //创建网络管理模块epoll/kqueue这种
     server.el = aeCreateEventLoop(server.maxclients+CONFIG_FDSET_INCR);
     if (server.el == NULL) {
         serverLog(LL_WARNING,
@@ -2787,10 +2804,12 @@ void initServer(void) {
             strerror(errno));
         exit(1);
     }
+    //初始化redis的db
     server.db = zmalloc(sizeof(redisDb)*server.dbnum);
 
     /* Open the TCP listening socket for the user commands. */
     if (server.port != 0 &&
+        //建立监听并将监听的文件描述符记录到ipfd中，ipfd_count记录成功建立的文件数量
         listenToPort(server.port,server.ipfd,&server.ipfd_count) == C_ERR)
         exit(1);
     if (server.tls_port != 0 &&
@@ -2810,13 +2829,14 @@ void initServer(void) {
     }
 
     /* Abort if there are no listening sockets at all. */
+    //listen全部失败
     if (server.ipfd_count == 0 && server.tlsfd_count == 0 && server.sofd < 0) {
         serverLog(LL_WARNING, "Configured to not listen anywhere, exiting.");
         exit(1);
     }
 
     /* Create the Redis databases, and initialize other internal state. */
-    for (j = 0; j < server.dbnum; j++) {
+    for (j = 0; j < server.dbnum; j++) {//初始化db中的数据，空间申请在上面做完了
         server.db[j].dict = dictCreate(&dbDictType,NULL);
         server.db[j].expires = dictCreate(&keyptrDictType,NULL);
         server.db[j].expires_cursor = 0;
@@ -2828,6 +2848,7 @@ void initServer(void) {
         server.db[j].defrag_later = listCreate();
         listSetFreeMethod(server.db[j].defrag_later,(void (*)(void*))sdsfree);
     }
+    //初始话LRU键值对
     evictionPoolAlloc(); /* Initialize the LRU keys pool. */
     server.pubsub_channels = dictCreate(&keylistDictType,NULL);
     server.pubsub_patterns = listCreate();
@@ -2848,6 +2869,7 @@ void initServer(void) {
     server.child_info_pipe[0] = -1;
     server.child_info_pipe[1] = -1;
     server.child_info_data.magic = 0;
+    //设置aof释放函数
     aofRewriteBufferReset();
     server.aof_buf = sdsempty();
     server.lastsave = time(NULL); /* At startup we consider the DB saved. */
@@ -2877,6 +2899,7 @@ void initServer(void) {
     /* Create the timer callback, this is our way to process many background
      * operations incrementally, like clients timeout, eviction of unaccessed
      * expired keys and so forth. */
+    //创建定时器
     if (aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL) == AE_ERR) {
         serverPanic("Can't create event loop timers.");
         exit(1);
@@ -2884,7 +2907,9 @@ void initServer(void) {
 
     /* Create an event handler for accepting new connections in TCP and Unix
      * domain sockets. */
+    //创建响应服务因为tcp或者unix套接字连接
     for (j = 0; j < server.ipfd_count; j++) {
+        //这边就是注册accept的处理逻辑
         if (aeCreateFileEvent(server.el, server.ipfd[j], AE_READABLE,
             acceptTcpHandler,NULL) == AE_ERR)
             {
@@ -2919,7 +2944,7 @@ void initServer(void) {
     aeSetAfterSleepProc(server.el,afterSleep);
 
     /* Open the AOF file if needed. */
-    if (server.aof_state == AOF_ON) {
+    if (server.aof_state == AOF_ON) {//将aof的文件描述符记录
         server.aof_fd = open(server.aof_filename,
                                O_WRONLY|O_APPEND|O_CREAT,0644);
         if (server.aof_fd == -1) {
@@ -2938,11 +2963,14 @@ void initServer(void) {
         server.maxmemory = 3072LL*(1024*1024); /* 3 GB */
         server.maxmemory_policy = MAXMEMORY_NO_EVICTION;
     }
-
+    //集群处理
     if (server.cluster_enabled) clusterInit();
     replicationScriptCacheInit();
+    //lua环境载入
     scriptingInit(1);
+    //慢日志初始化
     slowlogInit();
+    //延迟监控？
     latencyMonitorInit();
 }
 
@@ -2953,7 +2981,9 @@ void initServer(void) {
  * see: https://sourceware.org/bugzilla/show_bug.cgi?id=19329 */
 void InitServerLast() {
     bioInit();
+    //初始化io出了thread list
     initThreadedIO();
+    //jemalloc初始化
     set_jemalloc_bg_thread(server.jemalloc_bg_thread);
     server.initial_memory_usage = zmalloc_used_memory();
 }
@@ -3028,18 +3058,22 @@ void populateCommandTable(void) {
     int numcommands = sizeof(redisCommandTable)/sizeof(struct redisCommand);
 
     for (j = 0; j < numcommands; j++) {
+        //指针型的数组每个元素只占用一个字节用与存储实际元素的地址
         struct redisCommand *c = redisCommandTable+j;
         int retval1, retval2;
 
         /* Translate the command string flags description into an actual
          * set of flags. */
+        //设置每一个command的flag，需要根据注册是的描述走
         if (populateCommandTableParseFlags(c,c->sflags) == C_ERR)
             serverPanic("Unsupported command flag");
-
+        //acl过滤器，提供安全访问防止网络攻击和提高带宽
         c->id = ACLGetCommandID(c->name); /* Assign the ID used for ACL. */
+        //将command的相关信息注册到server中
         retval1 = dictAdd(server.commands, sdsnew(c->name), c);
         /* Populate an additional dictionary that will be unaffected
          * by rename-command statements in redis.conf. */
+        //注册两份
         retval2 = dictAdd(server.orig_commands, sdsnew(c->name), c);
         serverAssert(retval1 == DICT_OK && retval2 == DICT_OK);
     }
@@ -4641,6 +4675,7 @@ void daemonize(void) {
     /* Every output goes to /dev/null. If Redis is daemonized but
      * the 'logfile' is set to 'stdout' in the configuration file
      * it will not log at all. */
+    //linux的特殊路径，记录会全部为空
     if ((fd = open("/dev/null", O_RDWR, 0)) != -1) {
         dup2(fd, STDIN_FILENO);
         dup2(fd, STDOUT_FILENO);
@@ -4968,6 +5003,12 @@ int iAmMaster(void) {
 
 //redis启动函数
 int main(int argc, char **argv) {
+    /*
+    struct timeval {
+        time_t      tv_sec;     /* seconds */
+        suseconds_t tv_usec;    /* microseconds */
+    };
+    */
     struct timeval tv;
     int j;
 
@@ -4998,24 +5039,36 @@ int main(int argc, char **argv) {
 #endif
 
     /* We need to initialize our libraries, and the server configuration. */
+    //初始化依赖和服务器配置
 #ifdef INIT_SETPROCTITLE_REPLACEMENT
     spt_init(argc, argv);
 #endif
+    //设置本地化处理的一些东西，比如字符串，数字，货币，日期，时间等内容实现国际化和本地化
     setlocale(LC_COLLATE,"");
     tzset(); /* Populates 'timezone' global. */
+    //设置redis oom的处理方式
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
+    //根据时间和pid生成一个随机数种子
     srand(time(NULL)^getpid());
+    //获取时间戳
     gettimeofday(&tv,NULL);
+    //初始化crc64的校验数组数据，需要根据系统大小端存储做不同的处理，所以无法像crc16一样直接写死
     crc64_init();
 
     uint8_t hashseed[16];
+    //获取16字节的随机数据，最好是从/dev/urandom中获取到，不然就是系统生成
     getRandomBytes(hashseed,sizeof(hashseed));
+    //初始化dict hash种子
     dictSetHashFunctionSeed(hashseed);
+    //判断是否开启了哨兵模式
     server.sentinel_mode = checkForSentinelMode(argc,argv);
+    //初始化server一系列启动参数，指令也在这边做了注册
     initServerConfig();
+    //ACL子系统必须尽快初始化，因为基本的网络代码和客户端创建都依赖于它。
     ACLInit(); /* The ACL subsystem must be initialized ASAP because the
                   basic networking code and client creation depends on it. */
     moduleInitModulesSystem();
+    //证书启用
     tlsInit();
 
     /* Store the executable path and arguments in a safe place in order
@@ -5028,16 +5081,17 @@ int main(int argc, char **argv) {
     /* We need to init sentinel right now as parsing the configuration file
      * in sentinel mode will have the effect of populating the sentinel
      * data structures with master nodes to monitor. */
-    if (server.sentinel_mode) {
+    if (server.sentinel_mode) {//如果是哨兵模式代表的是从机
         initSentinelConfig();
-        initSentinel();
+        initSentinel();//会将指令全部删除替换为哨兵从机专用的command
     }
 
     /* Check if we need to start in redis-check-rdb/aof mode. We just execute
      * the program main. However the program is part of the Redis executable
      * so that we can easily execute an RDB check on loading errors. */
+    //查看rdb或者aof文件合法性
     if (strstr(argv[0],"redis-check-rdb") != NULL)
-        redis_check_rdb_main(argc,argv,NULL);
+        redis_check_rdb_main(argc,argv,NULL);//rdb文件不存在修复，只能从最近已知良好的备份中恢复
     else if (strstr(argv[0],"redis-check-aof") != NULL)
         redis_check_aof_main(argc,argv);
 
@@ -5121,7 +5175,7 @@ int main(int argc, char **argv) {
     } else {
         serverLog(LL_WARNING, "Configuration loaded");
     }
-
+    //判断redis是否受监督
     server.supervised = redisIsSupervised(server.supervised_mode);
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
@@ -5129,10 +5183,12 @@ int main(int argc, char **argv) {
     initServer();
     if (background || server.pidfile) createPidFile();
     redisSetProcTitle(argv[0]);
+    //闲的没事的显示logo
     redisAsciiArt();
+    //可忽略 部分日志
     checkTcpBacklogSettings();
 
-    if (!server.sentinel_mode) {
+    if (!server.sentinel_mode) {//master
         /* Things not needed when running in Sentinel mode. */
         serverLog(LL_WARNING,"Server initialized");
     #ifdef __linux__
@@ -5141,8 +5197,9 @@ int main(int argc, char **argv) {
         moduleLoadFromQueue();
         ACLLoadUsersAtStartup();
         InitServerLast();
+        //本地数据的载入
         loadDataFromDisk();
-        if (server.cluster_enabled) {
+        if (server.cluster_enabled) {//集群处理
             if (verifyClusterConfigWithData() == C_ERR) {
                 serverLog(LL_WARNING,
                     "You can't have keys in a DB different than DB 0 when in "
@@ -5173,7 +5230,9 @@ int main(int argc, char **argv) {
     }
 
     redisSetCpuAffinity(server.server_cpulist);
+    //不出意外运行到这redis进入正式运行状态，监听el上所有的网路请求
     aeMain(server.el);
+    //释放redis的connection资源
     aeDeleteEventLoop(server.el);
     return 0;
 }

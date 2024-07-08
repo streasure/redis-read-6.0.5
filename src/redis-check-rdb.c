@@ -357,6 +357,7 @@ int redis_check_rdb_main(int argc, char **argv, FILE *fp) {
     rdbCheckMode = 1;
     rdbCheckInfo("Checking RDB file %s", argv[1]);
     rdbCheckSetupSignals();
+    //校验rdb文件的合法性
     int retval = redis_check_rdb(argv[1],fp);
     if (retval == 0) {
         rdbCheckInfo("\\o/ RDB looks OK! \\o/");

@@ -1051,7 +1051,9 @@ struct redisServer {
                                    is enabled. */
     int hz;                     /* serverCron() calls frequency in hertz */
     redisDb *db;
+    //指令集合，get/set/hget/hset
     dict *commands;             /* Command table */
+    //指令集合，启动的时候和commands数据相同，暂时未看到可以修改command.name的地方
     dict *orig_commands;        /* Command table before command renaming. */
     aeEventLoop *el;
     _Atomic unsigned int lruclock; /* Clock for LRU eviction */
@@ -1061,7 +1063,18 @@ struct redisServer {
     char *pidfile;              /* PID file path */
     int arch_bits;              /* 32 or 64 depending on sizeof(long) */
     int cronloops;              /* Number of times the cron function run */
+    /*
+    #1.runid
+        每个Redis服务器都会有一个表明自己身份的ID。在PSYNC中发送的这个ID是指之前连接的Master的ID，如果没保存这个ID，PSYNC的命令会使用”PSYNC ? -1” 这种形式发送给Master，表示需要全量复制。
+    #2.offset（复制偏移量）
+        在主从复制的Master和Slave双方都会各自维持一个offset。Master成功发送N个字节的命令后会将Master里的offset加上N，Slave在接收到N个字节命令后同样会将Slave里的offset增加N。
+        Master和Slave如果状态是一致的那么它的的offset也应该是一致的。
+    #3.复制积压缓冲区
+        复制积压缓冲区是由Master维护的一个固定长度环形积压队列(FIFO队列)，它的作用是缓存已经传播出去的命令。当Master进行命令传播时，不仅将命令发送给所有Slave，还会将命令写入到复制积压缓冲区里面。
+    */
+    //每次启动的唯一id
     char runid[CONFIG_RUN_ID_SIZE+1];  /* ID always different at every exec. */
+    //哨兵模式  主从节点故障自动切换
     int sentinel_mode;          /* True if this instance is a Sentinel. */
     size_t initial_memory_usage; /* Bytes used after initialization. */
     int always_show_logo;       /* Show logo even for non-stdout logging. */
@@ -1182,6 +1195,21 @@ struct redisServer {
     _Atomic size_t client_max_querybuf_len; /* Limit for client query buffer length */
     int dbnum;                      /* Total number of configured DBs */
     int supervised;                 /* 1 if supervised, 0 otherwise. */
+    //监督模式
+    /*
+    Redis的supervised_mode（监督模式）是Redis配置中的一个选项，用于指定Redis服务器的监督模式设置。这个设置主要影响Redis的后台管理和进程控制，具体作用如下：
+    自动重启管理：
+        supervised_mode的值可以是"no"、"upstart"或"systemd"。
+        no：表示Redis不由任何外部程序管理，不会自动重启。
+        upstart或systemd：表示Redis服务器由Upstart或Systemd等外部进程监控管理，发生意外时可以自动重启。
+    系统集成：
+        当将supervised_mode设置为"upstart"或"systemd"时，Redis可以集成到系统管理工具中，利用这些工具的强大功能来管理Redis进程的启动、停止和重启。
+    运行稳定性：
+        使用supervised_mode可以提升Redis服务器的运行稳定性，特别是在服务器重启或意外崩溃时能够自动恢复服务，减少因意外中断而导致的服务不可用时间。
+    配置建议：
+        在生产环境中，建议将supervised_mode设置为"systemd"或"upstart"，以便利用操作系统提供的管理和监控功能，保证Redis服务的高可用性和稳定性。
+    总之，supervised_mode选项允许根据需要配置Redis的监督模式，以便更有效地管理Redis实例的运行和维护。
+    */
     int supervised_mode;            /* See SUPERVISED_* */
     int daemonize;                  /* True if running as a daemon */
     clientBufferLimitsConfig client_obuf_limits[CLIENT_TYPE_OBUF_COUNT];
@@ -1270,6 +1298,7 @@ struct redisServer {
     char *syslog_ident;             /* Syslog ident */
     int syslog_facility;            /* Syslog facility */
     /* Replication (master) */
+    //每次都会生成新的随机id，防止重新启动触发一次全量复制大量消耗master和网络连接
     char replid[CONFIG_RUN_ID_SIZE+1];  /* My current replication ID. */
     char replid2[CONFIG_RUN_ID_SIZE+1]; /* replid inherited from master*/
     long long master_repl_offset;   /* My current replication offset */
@@ -1277,6 +1306,7 @@ struct redisServer {
     int slaveseldb;                 /* Last SELECTed DB in replication output */
     int repl_ping_slave_period;     /* Master pings the slave every N seconds */
     char *repl_backlog;             /* Replication backlog for partial syncs *///环形缓冲赋值队列
+    //#设置复制积压缓冲区大小，积压队列越大，允许主从数据库断线的时间就越长
     long long repl_backlog_size;    /* Backlog circular buffer size *///环形缓冲赋值队列容量
     long long repl_backlog_histlen; /* Backlog actual data length *///环形缓冲赋值队列已用大小（影响是否能部分复制）
     // 实际上谈不上空闲，因为总是环绕覆盖写，
@@ -1285,11 +1315,14 @@ struct redisServer {
                                        that is the next byte will'll write to.*/// 环形缓冲复制队列空闲起始位置（写从这里开始）
     long long repl_backlog_off;     /* Replication "master offset" of first
                                        byte in the replication backlog buffer.*/// 数据在环形缓冲复制队列的起始位置（读从这里开始）
+    //#没有salve连接时，多久释放一次复制积压缓冲区
     time_t repl_backlog_time_limit; /* Time without slaves after the backlog
                                        gets released. */// 环形缓冲复制队列生存时长
     time_t repl_no_slaves_since;    /* We have no slaves since that time.
                                        Only valid if server.slaves len is 0. */// 无可用从节点的发生时间
+    //#代表至少N台从服务器完成复制，才允许主服务器可写入，否则会返回错误。
     int repl_min_slaves_to_write;   /* Min number of slaves to write. */ // 最小需写的从节点数
+    //#允许从服务器断开连接的时间（单位s）
     int repl_min_slaves_max_lag;    /* Max lag of <count> slaves to write. */
     int repl_good_slaves_count;     /* Number of slaves with lag <= max_lag. */
     int repl_diskless_sync;         /* Master send RDB to slaves sockets directly. */// 不落磁盘（无盘）往从节点发送RDB（全量复制）

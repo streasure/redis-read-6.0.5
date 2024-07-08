@@ -252,7 +252,11 @@ uint16_t crcspeed16big(uint16_t big_table[8][256], uint16_t crc_in, void *buf,
 uint64_t crcspeed64native(uint64_t table[8][256], uint64_t crc, void *buf,
                           size_t len) {
     uint64_t n = 1;
-
+    /*
+        字节序转换：在不同的计算机体系结构中，整数的字节序（字节的存储顺序）可能不同，
+        有的系统采用小端序（Little Endian），有的采用大端序（Big Endian）。
+        通过*(char *)&n可以逐字节访问整数n的表示，这对于实现字节序转换（如网络字节序与主机字节序之间的转换）很有用。
+    */
     return *(char *)&n ? crcspeed64little(table, crc, buf, len)
                        : crcspeed64big(table, crc, buf, len);
 }
@@ -260,7 +264,11 @@ uint64_t crcspeed64native(uint64_t table[8][256], uint64_t crc, void *buf,
 uint16_t crcspeed16native(uint16_t table[8][256], uint16_t crc, void *buf,
                           size_t len) {
     uint64_t n = 1;
-
+    /*
+        字节序转换：在不同的计算机体系结构中，整数的字节序（字节的存储顺序）可能不同，
+        有的系统采用小端序（Little Endian），有的采用大端序（Big Endian）。
+        通过*(char *)&n可以逐字节访问整数n的表示，这对于实现字节序转换（如网络字节序与主机字节序之间的转换）很有用。
+    */
     return *(char *)&n ? crcspeed16little(table, crc, buf, len)
                        : crcspeed16big(table, crc, buf, len);
 }
@@ -268,14 +276,31 @@ uint16_t crcspeed16native(uint16_t table[8][256], uint16_t crc, void *buf,
 /* Initialize CRC lookup table in architecture-dependent manner. */
 void crcspeed64native_init(crcfn64 fn, uint64_t table[8][256]) {
     uint64_t n = 1;
-
+    /*
+        字节序转换：在不同的计算机体系结构中，整数的字节序（字节的存储顺序）可能不同，
+        有的系统采用小端序（Little Endian），有的采用大端序（Big Endian）。
+        通过*(char *)&n可以逐字节访问整数n的表示，这对于实现字节序转换（如网络字节序与主机字节序之间的转换）很有用。
+    */
     *(char *)&n ? crcspeed64little_init(fn, table)
                 : crcspeed64big_init(fn, table);
+    /*
+        biginit会先调用一步littleinit再做一步转化
+        整个代码可以修改为
+        uint64_t n = 1;
+        crcspeed64little_init(fn, table)；
+        if(!*(char *)&n){
+            big_init_other_handle_for_table(table)
+        }
+    */
 }
 
 void crcspeed16native_init(crcfn16 fn, uint16_t table[8][256]) {
     uint64_t n = 1;
-
+    /*
+        字节序转换：在不同的计算机体系结构中，整数的字节序（字节的存储顺序）可能不同，
+        有的系统采用小端序（Little Endian），有的采用大端序（Big Endian）。
+        通过*(char *)&n可以逐字节访问整数n的表示，这对于实现字节序转换（如网络字节序与主机字节序之间的转换）很有用。
+    */
     *(char *)&n ? crcspeed16little_init(fn, table)
                 : crcspeed16big_init(fn, table);
 }

@@ -46,19 +46,28 @@
 
 /* Include the best multiplexing layer supported by this system.
  * The following should be ordered by performances, descending. */
-#ifdef HAVE_EVPORT
-#include "ae_evport.c"
-#else
-    #ifdef HAVE_EPOLL
-    #include "ae_epoll.c"//epoll是linux特有的
-    #else
-        #ifdef HAVE_KQUEUE
-        #include "ae_kqueue.c"//mac，openbsd，freebsd等类bsd系统有和epoll比肩的kqueue机制
-        #else
-        #include "ae_select.c"
-        #endif
-    #endif
-#endif
+//下面是源码中的内容这边只是为了跳转的时候转到epoll做的一步处理
+// #ifdef HAVE_EVPORT
+// #include "ae_evport.c"
+// #else
+//     #ifdef HAVE_EPOLL
+//     #include "ae_epoll.c"//epoll是linux特有的
+//     #else
+//         #ifdef HAVE_KQUEUE
+//         #include "ae_kqueue.c"//mac，openbsd，freebsd等类bsd系统有和epoll比肩的kqueue机制
+//         #else
+//         #include "ae_select.c"
+//         #endif
+//     #endif
+// #endif
+
+
+/*
+    一下代码为手动添加，实际代码为上面被注释部分
+*/
+////////////////////////////////////////////////////////////////////////
+#include "ae_epoll.c"//epoll是linux特有的
+////////////////////////////////////////////////////////////////////////
 
 aeEventLoop *aeCreateEventLoop(int setsize) {
     aeEventLoop *eventLoop;
@@ -222,6 +231,7 @@ static void aeAddMillisecondsToNow(long long milliseconds, long *sec, long *ms) 
     *ms = when_ms;
 }
 
+//新创建一个定时任务并放在列表首位
 long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
         aeTimeProc *proc, void *clientData,
         aeEventFinalizerProc *finalizerProc)
@@ -232,6 +242,7 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
     te = zmalloc(sizeof(*te));
     if (te == NULL) return AE_ERR;
     te->id = id;
+    //获取各级别的时间戳
     aeAddMillisecondsToNow(milliseconds,&te->when_sec,&te->when_ms);
     te->timeProc = proc;
     te->finalizerProc = finalizerProc;

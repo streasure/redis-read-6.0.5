@@ -928,6 +928,7 @@ char *ACLSetUserStringError(void) {
 
 /* Initialize the default user, that will always exist for all the process
  * lifetime. */
+//初始化整个生命周期的默认用户
 void ACLInitDefaultUser(void) {
     DefaultUser = ACLCreateUser("default",7);
     ACLSetUser(DefaultUser,"+@all",-1);
